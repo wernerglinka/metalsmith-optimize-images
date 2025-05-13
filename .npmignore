@@ -1,0 +1,37 @@
+# Source files (we publish only the lib/ directory)
+/src/
+
+# Development and testing
+/test/
+/scripts/
+/notes/
+coverage/
+.nyc_output/
+coverage.info
+*.lcov
+
+# Configuration files
+.eslintrc*
+.eslintignore
+.prettier*
+.release-it.json
+.nvmrc
+.gitignore
+.github/
+.vscode/
+.idea/
+
+# Documentation not needed in the package
+CLAUDE.md
+plugin-dev-notes.md
+
+# Misc
+.DS_Store
+*.log
+.env*
+node_modules/
+
+# Don't ignore these files
+!lib/
+!LICENSE
+!README.md

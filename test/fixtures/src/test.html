@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Page</title>
+</head>
+<body>
+  <h1>Test Images</h1>
+  
+  <!-- Standard image -->
+  <img src="images/tree.jpg" alt="Tree">
+  
+  <!-- Image with class -->
+  <img src="images/industry.jpg" alt="Industry" class="responsive-image">
+  
+  <!-- Image to ignore -->
+  <img src="images/work.jpg" alt="Work" data-no-responsive>
+  
+  <!-- External image - should be skipped -->
+  <img src="https://example.com/image.jpg" alt="External image">
+  
+  <!-- Data URL image - should be skipped -->
+  <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" alt="Data URL image">
+  
+  <!-- Image with sizes -->
+  <img src="images/people.jpg" alt="People" sizes="(max-width: 600px) 100vw, 50vw">
+  
+  <!-- Image with other attributes -->
+  <img src="images/buildings.png" alt="Buildings" id="special-image" data-custom="value">
+</body>
+</html>

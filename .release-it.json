@@ -1,0 +1,20 @@
+{
+  "github": {
+    "release": true,
+    "releaseName": "Release ${version}",
+    "releaseNotes": "npx auto-changelog --stdout --commit-limit false --unreleased --ignore-commit-pattern '^((dev|chore|ci):|Release)'"
+  },
+  "git": {
+    "requireBranch": "main",
+    "commitMessage": "Release ${version}",
+    "tagName": "v${version}",
+    "tagAnnotation": "Release ${version}"
+  },
+  "hooks": {
+    "before:init": ["npm run lint:check", "npm test"],
+    "after:release": "echo 'Successfully released ${name} v${version} to GitHub.'"
+  },
+  "npm": {
+    "publish": true
+  }
+}
