@@ -14,8 +14,6 @@
     "node": ">= 18.0.0"
   },
   "scripts": {
-    "pretest": "node scripts/check-node-version.js",
-    "prebuild": "node scripts/check-node-version.js",
     "build": "microbundle --entry src/index.js --output lib/index.js --target node -f esm,cjs --strict --generateTypes=false",
     "changelog": "auto-changelog -u --commit-limit false --ignore-commit-pattern '^((dev|chore|ci):|Release)'",
     "coverage": "npm test && c8 report --reporter=text-lcov > ./coverage.info",
@@ -32,7 +30,6 @@
     "test:unit": "mocha 'test/unit/**/*.js' -t 5000",
     "test:esm": "c8 --include=src/**/*.js mocha test/index.js -t 15000",
     "test:cjs": "c8 --include=src/**/*.js mocha test/cjs.test.cjs -t 15000",
-    "create-test-images": "node test/create-test-image.js",
     "depcheck": "depcheck"
   },
   "repository": {
