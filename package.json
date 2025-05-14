@@ -1,6 +1,6 @@
 {
   "name": "metalsmith-optimize-images",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Metalsmith plugin for generating responsive images with optimal formats",
   "type": "module",
   "main": "./lib/index.cjs",
