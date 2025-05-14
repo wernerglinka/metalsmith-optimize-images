@@ -3,7 +3,7 @@
     "release": true,
     "releaseName": "metalsmith-optimize-images ${version}",
     "tokenRef": "GITHUB_TOKEN",
-    "assets": ["*.tgz"]
+    "assets": ["metalsmith-optimize-images-*.tgz"]
   },
   "git": {
     "commitMessage": "Release ${version}",
