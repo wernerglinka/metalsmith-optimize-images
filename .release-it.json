@@ -15,6 +15,6 @@
     "after:release": "echo 'Successfully released ${name} v${version} to GitHub.'"
   },
   "npm": {
-    "publish": true
+    "publish": false
   }
 }

@@ -32,9 +32,9 @@ import { processHtmlFile, generateMetadata } from './processors/htmlProcessor.js
  * @param {boolean} [options.generateMetadata] - Whether to generate a metadata JSON file
  * @return {Function} - Metalsmith plugin function
  */
-function responsiveImagesPlugin(options = {}) {
+function responsiveImagesPlugin( options = {} ) {
   // Build configuration with defaults and user options
-  const config = buildConfig(options);
+  const config = buildConfig( options );
 
   /**
    * The Metalsmith plugin function
@@ -43,22 +43,22 @@ function responsiveImagesPlugin(options = {}) {
    * @param {Function} done - Callback function
    * @return {void}
    */
-  return async function responsiveImages(files, metalsmith, done) {
+  return async function responsiveImages( files, metalsmith, done ) {
     try {
       const destination = metalsmith.destination();
-      const outputPath = path.join(destination, config.outputDir);
+      const outputPath = path.join( destination, config.outputDir );
 
       // Set up debug function
-      const debug = metalsmith.debug('metalsmith-responsive-images');
+      const debug = metalsmith.debug( 'metalsmith-responsive-images' );
 
       // Create output directory
-      mkdirp.mkdirpSync(outputPath);
+      mkdirp.mkdirpSync( outputPath );
 
       // Find all HTML files
-      const htmlFiles = Object.keys(files).filter((file) => metalsmith.match(config.htmlPattern, file));
+      const htmlFiles = Object.keys( files ).filter( ( file ) => metalsmith.match( config.htmlPattern, file ) );
 
-      if (htmlFiles.length === 0) {
-        debug('No HTML files found');
+      if ( htmlFiles.length === 0 ) {
+        debug( 'No HTML files found' );
         return done();
       }
 
@@ -67,33 +67,33 @@ function responsiveImagesPlugin(options = {}) {
 
       // Process HTML files in parallel with a concurrency limit
       const chunks = [];
-      for (let i = 0; i < htmlFiles.length; i += config.concurrency) {
-        chunks.push(htmlFiles.slice(i, i + config.concurrency));
+      for ( let i = 0; i < htmlFiles.length; i += config.concurrency ) {
+        chunks.push( htmlFiles.slice( i, i + config.concurrency ) );
       }
 
       // Process all chunks in parallel
       await Promise.all(
-        chunks.map(async (chunk) => {
+        chunks.map( async ( chunk ) => {
           // Process files within each chunk in parallel
           await Promise.all(
-            chunk.map(async (htmlFile) => {
-              await processHtmlFile(htmlFile, files[htmlFile], files, metalsmith, processedImages, debug, config);
-            })
+            chunk.map( async ( htmlFile ) => {
+              await processHtmlFile( htmlFile, files[htmlFile], files, metalsmith, processedImages, debug, config );
+            } )
           );
-        })
+        } )
       );
 
       // Generate metadata file if requested
-      if (config.generateMetadata) {
-        generateMetadata(processedImages, files, config);
+      if ( config.generateMetadata ) {
+        generateMetadata( processedImages, files, config );
       }
 
-      debug('Responsive images processing complete');
+      debug( 'Responsive images processing complete' );
       done();
-    } catch (err) {
+    } catch ( err ) {
       // Use console.error for errors to ensure they're visible even if debug mode is not enabled
-      console.error(`Error in responsive images plugin: ${err.message}`);
-      done(err);
+      console.error( `Error in responsive images plugin: ${err.message}` );
+      done( err );
     }
   };
 }

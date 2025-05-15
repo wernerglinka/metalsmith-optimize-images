@@ -8,12 +8,12 @@
  * @param {Object} source - Source object
  * @return {Object} - Merged result
  */
-function deepMerge(target, source) {
+function deepMerge( target, source ) {
   const result = { ...target };
 
-  for (const key in source) {
-    if (source[key] instanceof Object && key in target && target[key] instanceof Object) {
-      result[key] = deepMerge(target[key], source[key]);
+  for ( const key in source ) {
+    if ( source[key] instanceof Object && key in target && target[key] instanceof Object ) {
+      result[key] = deepMerge( target[key], source[key] );
     } else {
       result[key] = source[key];
     }
@@ -27,7 +27,7 @@ function deepMerge(target, source) {
  * @param {Object} options - User provided plugin options
  * @return {Object} - Complete config with defaults
  */
-export function buildConfig(options = {}) {
+export function buildConfig( options = {} ) {
   // Default configuration with sensible defaults
   const defaults = {
     // Responsive breakpoints to generate
@@ -77,10 +77,10 @@ export function buildConfig(options = {}) {
   };
 
   // Special handling for formatOptions to ensure deep merging
-  if (options.formatOptions) {
+  if ( options.formatOptions ) {
     options = {
       ...options,
-      formatOptions: deepMerge(defaults.formatOptions, options.formatOptions)
+      formatOptions: deepMerge( defaults.formatOptions, options.formatOptions )
     };
   }
 
