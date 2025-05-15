@@ -7,7 +7,7 @@ Metalsmith plugin for generating responsive images with optimal formats
 [![metalsmith:plugin][metalsmith-badge]][metalsmith-url]
 [![npm: version][npm-badge]][npm-url]
 [![license: MIT][license-badge]][license-url]
-[![coverage][coverage-badge]][coverage-url]
+[![test coverage][coverage-badge]][coverage-url]
 [![ESM/CommonJS][modules-badge]][npm-url]
 
 ## Features
@@ -149,10 +149,6 @@ Add the `data-no-responsive` attribute to any image you don't want processed:
 <img src="image.jpg" data-no-responsive alt="This image won't be processed" />
 ```
 
-## Test Coverage
-
-This project maintains a high level of test coverage to ensure reliability.
-
 ## Debug
 
 For debugging, use Metalsmith's debug mode:
@@ -215,5 +211,5 @@ MIT
 [license-badge]: https://img.shields.io/github/license/wernerglinka/metalsmith-optimize-images
 [license-url]: LICENSE
 [coverage-badge]: https://img.shields.io/badge/test%20coverage-95%25-brightgreen
-[coverage-url]: #test-coverage
+[coverage-url]: https://github.com/wernerglinka/metalsmith-optimize-images/actions/workflows/test.yml
 [modules-badge]: https://img.shields.io/badge/modules-ESM%2FCJS-blue

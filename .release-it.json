@@ -3,7 +3,8 @@
     "release": true,
     "releaseName": "metalsmith-optimize-images ${version}",
     "tokenRef": "GITHUB_TOKEN",
-    "assets": ["metalsmith-optimize-images-*.tgz"]
+    "assets": ["metalsmith-optimize-images-*.tgz", "CHANGELOG.md"],
+    "releaseNotes": "cat CHANGELOG.md"
   },
   "git": {
     "commitMessage": "Release ${version}",
@@ -14,7 +15,7 @@
   },
   "hooks": {
     "before:init": ["npm run lint", "npm test"],
-    "after:bump": "auto-changelog -p --commit-limit false --ignore-commit-pattern '^((dev|chore|ci):|Release)'",
+    "after:bump": "auto-changelog -p --commit-limit false --ignore-commit-pattern '^((dev|chore|ci):|Release)' && git add CHANGELOG.md",
     "before:github:release": "echo 'Creating tarball...' && npm pack && echo 'Listing tarballs:' && ls -la *.tgz || echo 'No tarballs found'",
     "after:release": "echo Successfully released ${name} v${version} to ${repo.repository}."
   },
