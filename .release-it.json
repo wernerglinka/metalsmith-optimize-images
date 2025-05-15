@@ -1,18 +1,22 @@
 {
   "github": {
     "release": true,
-    "releaseName": "Release ${version}",
-    "releaseNotes": "npx auto-changelog --stdout --commit-limit false --unreleased --ignore-commit-pattern '^((dev|chore|ci):|Release)'"
+    "releaseName": "metalsmith-optimize-images ${version}",
+    "tokenRef": "GITHUB_TOKEN",
+    "assets": ["metalsmith-optimize-images-*.tgz"]
   },
   "git": {
-    "requireBranch": "main",
     "commitMessage": "Release ${version}",
-    "tagName": "v${version}",
-    "tagAnnotation": "Release ${version}"
+    "commitArgs": ["-S"],
+    "tagAnnotation": "Release ${version}",
+    "tagArgs": ["-s"],
+    "changelog": "auto-changelog -u --commit-limit false --ignore-commit-pattern '^((dev|chore|ci):|Release)' --stdout -t https://raw.githubusercontent.com/release-it/release-it/master/templates/changelog-compact.hbs"
   },
   "hooks": {
-    "before:init": ["npm run lint:check", "npm test"],
-    "after:release": "echo 'Successfully released ${name} v${version} to GitHub.'"
+    "before:init": ["npm run lint", "npm test"],
+    "after:bump": "auto-changelog -p --commit-limit false --ignore-commit-pattern '^((dev|chore|ci):|Release)'",
+    "before:github:release": "echo 'Creating tarball...' && npm pack && echo 'Listing tarballs:' && ls -la *.tgz || echo 'No tarballs found'",
+    "after:release": "echo Successfully released ${name} v${version} to ${repo.repository}."
   },
   "npm": {
     "publish": false
