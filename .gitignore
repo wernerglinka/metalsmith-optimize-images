@@ -1,13 +1,3 @@
-node_modules/
-lib/
-coverage/
-.nyc_output/
-.env
-*.log
-.DS_Store
-**/.claude/settings.local.json
-
-
 # Logs
 logs
 *.log
@@ -25,7 +15,7 @@ pids
 lib-cov
 
 # Coverage directory used by tools like istanbul
-coverage
+coverage/
 coverage.info
 *.lcov
 
@@ -49,8 +39,8 @@ jspm_packages/
 # Optional REPL history
 .node_repl_history
 
-# We're keeping the .tgz files for release-it to use
-# *.tgz
+# .tgz files
+*.tgz
 
 # dotenv environment variable files
 .env
@@ -69,3 +59,4 @@ jspm_packages/
 # Project specific
 /notes/
 CLAUDE.md
+**/.claude/settings.local.json
