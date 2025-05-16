@@ -151,38 +151,10 @@ Add the `data-no-responsive` attribute to any image you don't want processed:
 
 ## Debug
 
-For debugging, use Metalsmith's debug mode:
+To enable debug logs, set the DEBUG environment variable to metalsmith-optimize-images*:
 
 ```javascript
-// Enable debug output by setting the DEBUG environment variable
-// DEBUG=metalsmith-responsive-images node build.js
-
-const metalsmith = Metalsmith(__dirname).use(optimizeImages());
-// other plugins...
-```
-
-You can also use the [metalsmith-debug](https://github.com/metalsmith/metalsmith-debug) plugin:
-
-```javascript
-const debug = require('metalsmith-debug');
-
-const metalsmith = Metalsmith(__dirname)
-  .use(debug()) // Add the metalsmith-debug plugin
-  .use(optimizeImages());
-// other plugins...
-```
-
-Or with the CLI:
-
-```json
-{
-  "plugins": {
-    "metalsmith-debug": true,
-    "metalsmith-optimize-images": {
-      "widths": [320, 640, 960, 1280, 1920]
-    }
-  }
-}
+metalsmith.env('DEBUG', 'metalsmith-optimize-images*')
 ```
 
 ## CLI Usage
