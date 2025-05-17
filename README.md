@@ -21,6 +21,9 @@ Metalsmith plugin for generating responsive images with optimal formats
 - **Parallel processing**: Processes images in parallel for faster builds
 - **Metadata generation**: Creates a JSON file with image information
 - **Configurable compression**: Customize compression settings per format
+- **ESM and CommonJS support**:
+    - ESM: `import prism from 'metalsmith-optimize-images'`
+    - CommonJS: `const prism = require('metalsmith-optimize-images')`
 
 ## Installation
 
@@ -28,34 +31,14 @@ Metalsmith plugin for generating responsive images with optimal formats
 npm install metalsmith-optimize-images
 ```
 
-### Requirements
+## Requirements
 
-- Node.js 18.0.0 or newer
-- Metalsmith 2.5.0 or newer
+- Node.js >=18.0.0
+- Metalsmith >=2.5.0
 
 ## Usage
 
-### ESM
-
 ```javascript
-import metalsmith from 'metalsmith';
-import optimizeImages from 'metalsmith-optimize-images';
-
-metalsmith.use(
-  optimizeImages({
-    // configuration options
-    widths: [320, 640, 960, 1280, 1920],
-    formats: ['avif', 'webp', 'original']
-  })
-);
-```
-
-### CommonJS
-
-```javascript
-const metalsmith = require('metalsmith');
-const optimizeImages = require('metalsmith-optimize-images');
-
 metalsmith.use(
   optimizeImages({
     // configuration options
