@@ -38,8 +38,18 @@ npm install metalsmith-optimize-images
 
 ## Usage
 
+> This plugin **must** be run after assets are copied but before any final HTML processing.
+
 ```javascript
-metalsmith.use(
+
+metalsmith
+.use(
+    assets( {
+      source: 'lib/assets/', // Where to find assets
+      destination: 'assets/' // Where to copy assets
+    } )
+  )
+.use(
   optimizeImages({
     // configuration options
     widths: [320, 640, 960, 1280, 1920],
