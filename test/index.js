@@ -55,7 +55,8 @@ describe( 'metalsmith-optimize-images', function () {
         optimizeImages( {
           widths: [300, 600],
           formats: ['webp', 'original'],
-          outputDir: 'assets/responsive'
+          outputDir: 'assets/responsive',
+          isProgressive: false // Disable progressive loading for this test
         } )
       )
       .build( ( err ) => {
@@ -97,13 +98,63 @@ describe( 'metalsmith-optimize-images', function () {
       } );
   } );
 
+  it( 'should generate correct HTML structure for progressive loading', ( done ) => {
+    // Test minimal setup with just one image to verify HTML structure
+    const testMetalsmith = Metalsmith( fixturesDir ).clean( true ).source( 'src' ).destination( buildDir );
+
+    testMetalsmith
+      .use(
+        optimizeImages( {
+          widths: [300, 600],
+          formats: ['original'], // Simple: just original format
+          outputDir: 'assets/responsive',
+          isProgressive: true
+        } )
+      )
+      .build( ( err ) => {
+        if ( err ) {
+          return done( err );
+        }
+
+        // Read the HTML file
+        const htmlPath = path.join( buildDir, 'test.html' );
+        const htmlContent = fs.readFileSync( htmlPath, 'utf8' );
+        const $ = cheerio.load( htmlContent );
+
+        // Check for progressive wrapper structure
+        const $wrapper = $( '.responsive-wrapper.js-progressive-image-wrapper' ).first();
+        assert.strictEqual( $wrapper.length, 1, 'Should have progressive wrapper' );
+
+        // Check for aspect-ratio style
+        const style = $wrapper.attr( 'style' );
+        assert.strictEqual( style.includes( 'aspect-ratio:' ), true, 'Should have aspect-ratio CSS' );
+
+        // Check for low-res image
+        const $lowRes = $wrapper.find( '.low-res' );
+        assert.strictEqual( $lowRes.length, 1, 'Should have low-res image' );
+        assert.strictEqual( $lowRes.attr( 'src' ).includes( 'placeholder' ), true, 'Low-res should be placeholder' );
+
+        // Check for high-res image
+        const $highRes = $wrapper.find( '.high-res' );
+        assert.strictEqual( $highRes.length, 1, 'Should have high-res image' );
+        assert.strictEqual( $highRes.attr( 'src' ), '', 'High-res src should be empty initially' );
+        assert.strictEqual( !!$highRes.attr( 'data-source' ), true, 'High-res should have data-source' );
+
+        console.log( 'Generated HTML structure:' );
+        console.log( $wrapper.html() );
+
+        done();
+      } );
+  } );
+
   it( 'should skip images with data-no-responsive attribute', ( done ) => {
     metalsmith
       .use(
         optimizeImages( {
           widths: [300, 600],
           formats: ['webp', 'original'],
-          outputDir: 'assets/responsive'
+          outputDir: 'assets/responsive',
+          isProgressive: false // Disable progressive loading for this test
         } )
       )
       .build( ( err ) => {
@@ -207,7 +258,8 @@ describe( 'metalsmith-optimize-images', function () {
         optimizeImages( {
           widths: [300, 600],
           formats: ['webp', 'original'],
-          outputDir: 'assets/responsive'
+          outputDir: 'assets/responsive',
+          isProgressive: false // Disable progressive loading for this test
         } )
       )
       .build( ( err ) => {
@@ -327,7 +379,8 @@ describe( 'metalsmith-optimize-images', function () {
         optimizeImages( {
           widths: [300, 600],
           formats: ['webp', 'original'],
-          outputDir: 'assets/responsive'
+          outputDir: 'assets/responsive',
+          isProgressive: false // Disable progressive loading for this test
         } )
       )
       .build( ( err ) => {

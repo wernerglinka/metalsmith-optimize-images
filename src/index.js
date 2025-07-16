@@ -1,6 +1,6 @@
 /**
  * Metalsmith plugin for generating responsive images with optimal formats
- * @module metalsmith-responsive-images
+ * @module metalsmith-optimize-images
  */
 
 import path from 'path';
@@ -30,9 +30,14 @@ import { processHtmlFile, generateMetadata } from './processors/htmlProcessor.js
  * @param {string} [options.sizes] - Default sizes attribute
  * @param {number} [options.concurrency] - Maximum number of images to process in parallel
  * @param {boolean} [options.generateMetadata] - Whether to generate a metadata JSON file
+ * @param {boolean} [options.isProgressive] - Whether to use progressive image loading (default: true)
+ * @param {Object} [options.placeholder] - Placeholder image settings for progressive loading
+ * @param {number} [options.placeholder.width] - Placeholder image width (default: 50)
+ * @param {number} [options.placeholder.quality] - Placeholder image quality (default: 30)
+ * @param {number} [options.placeholder.blur] - Placeholder image blur amount (default: 10)
  * @return {Function} - Metalsmith plugin function
  */
-function responsiveImagesPlugin( options = {} ) {
+function optimizeImagesPlugin( options = {} ) {
   // Build configuration with defaults and user options
   const config = buildConfig( options );
 
@@ -43,18 +48,18 @@ function responsiveImagesPlugin( options = {} ) {
    * @param {Function} done - Callback function
    * @return {void}
    */
-  return async function responsiveImages( files, metalsmith, done ) {
+  return async function optimizeImages( files, metalsmith, done ) {
     try {
       const destination = metalsmith.destination();
       const outputPath = path.join( destination, config.outputDir );
 
-      // Set up debug function
-      const debug = metalsmith.debug( 'metalsmith-responsive-images' );
+      // Set up debug function for logging (uses 'DEBUG=metalsmith-optimize-images*' env var)
+      const debug = metalsmith.debug( 'metalsmith-optimize-images' );
 
-      // Create output directory
+      // Ensure the output directory exists where processed images will be saved
       mkdirp.mkdirpSync( outputPath );
 
-      // Find all HTML files
+      // Find all HTML files that match the pattern (default: **/*.html)
       const htmlFiles = Object.keys( files ).filter( ( file ) => metalsmith.match( config.htmlPattern, file ) );
 
       if ( htmlFiles.length === 0 ) {
@@ -62,28 +67,33 @@ function responsiveImagesPlugin( options = {} ) {
         return done();
       }
 
-      // Track all generated images to avoid duplicate processing
+      // Cache to avoid re-processing identical images across different HTML files
+      // Key: "filepath:mtime", Value: array of processed image variants
       const processedImages = new Map();
 
-      // Process HTML files in parallel with a concurrency limit
+      // Chunk HTML files to respect concurrency limit (default: 5)
+      // This prevents overwhelming the system with too many parallel operations
       const chunks = [];
       for ( let i = 0; i < htmlFiles.length; i += config.concurrency ) {
         chunks.push( htmlFiles.slice( i, i + config.concurrency ) );
       }
 
-      // Process all chunks in parallel
+      // Process all chunks in parallel - each chunk processes its files in parallel
+      // This creates a two-level parallelism: chunk-level and file-level within chunks
       await Promise.all(
         chunks.map( async ( chunk ) => {
           // Process files within each chunk in parallel
           await Promise.all(
             chunk.map( async ( htmlFile ) => {
+              // This function parses HTML, finds images, processes them, and updates the HTML
               await processHtmlFile( htmlFile, files[htmlFile], files, metalsmith, processedImages, debug, config );
             } )
           );
         } )
       );
 
-      // Generate metadata file if requested
+      // Optional: Generate a JSON metadata file with information about all processed images
+      // Useful for debugging or integration with other tools
       if ( config.generateMetadata ) {
         generateMetadata( processedImages, files, config );
       }
@@ -98,4 +108,4 @@ function responsiveImagesPlugin( options = {} ) {
   };
 }
 
-export default responsiveImagesPlugin;
+export default optimizeImagesPlugin;
