@@ -20,7 +20,7 @@ Metalsmith plugin for generating responsive images with optimal formats
 - **Content-based hashing**: Adds hash to filenames for optimal caching
 - **Layout shift prevention**: Adds width/height attributes
 - **Parallel processing**: Processes images in parallel for faster builds
-- **Metadata generation**: Creates a JSON file with image information
+- **Metadata generation**: Creates a JSON manifest with image information and variants
 - **Configurable compression**: Customize compression settings per format
 - **ESM and CommonJS support**:
   - ESM: `import optimizeImages from 'metalsmith-optimize-images'`
@@ -83,7 +83,7 @@ metalsmith
 | `dimensionAttributes` | `boolean`  | `true`                                | Add width/height to prevent layout shift |
 | `sizes`               | `string`   | `(max-width: 768px) 100vw, 75vw`      | Default sizes attribute                  |
 | `concurrency`         | `number`   | `5`                                   | Process N images at a time               |
-| `generateMetadata`    | `boolean`  | `false`                               | Generate a metadata JSON file            |
+| `generateMetadata`    | `boolean`  | `false`                               | Generate a metadata JSON file at `{outputDir}/responsive-images-manifest.json` |
 | `isProgressive`       | `boolean`  | `false`                               | Enable progressive image loading         |
 | `placeholder`         | `object`   | See below                             | Placeholder image settings               |
 
@@ -163,6 +163,9 @@ metalsmith.use(
 
     // Custom output directory
     outputDir: 'images/processed',
+
+    // Generate metadata manifest
+    generateMetadata: true, // Creates images/processed/responsive-images-manifest.json
 
     // Don't add lazy loading
     lazy: false
@@ -294,6 +297,36 @@ The plugin provides CSS for progressive loading, but you can customize it:
   opacity: 0;
 }
 ```
+
+## Metadata Manifest
+
+When `generateMetadata: true` is enabled, the plugin creates a JSON file at `{outputDir}/responsive-images-manifest.json` containing detailed information about all processed images:
+
+```json
+{
+  "images/hero.jpg": [
+    {
+      "path": "assets/images/responsive/hero-320w-a1b2c3d4.avif",
+      "width": 320,
+      "height": 180,
+      "format": "avif",
+      "size": 8432
+    },
+    {
+      "path": "assets/images/responsive/hero-320w-a1b2c3d4.webp", 
+      "width": 320,
+      "height": 180,
+      "format": "webp",
+      "size": 12658
+    }
+  ]
+}
+```
+
+This manifest is useful for:
+- **Debugging**: Verify which variants were generated
+- **Integration**: Use variant information in other tools
+- **Performance analysis**: Compare file sizes across formats
 
 ## Debug
 
