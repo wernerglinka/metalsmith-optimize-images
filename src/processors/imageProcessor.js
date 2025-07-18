@@ -62,7 +62,17 @@ export async function processImageToVariants( buffer, originalPath, debugFn, con
         } else {
           // For specific formats (avif, webp, etc.), apply format-specific options
           const formatOptions = config.formatOptions[format] || {};
-          formatted = resized.clone()[format]( formatOptions );
+          if ( format === 'avif' ) {
+            formatted = resized.clone().avif( formatOptions );
+          } else if ( format === 'webp' ) {
+            formatted = resized.clone().webp( formatOptions );
+          } else if ( format === 'jpeg' ) {
+            formatted = resized.clone().jpeg( formatOptions );
+          } else if ( format === 'png' ) {
+            formatted = resized.clone().png( formatOptions );
+          } else {
+            formatted = resized.clone()[format]( formatOptions );
+          }
         }
 
         // Generate the actual image buffer - this is where compression happens

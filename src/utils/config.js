@@ -97,7 +97,11 @@ export function buildConfig( options = {} ) {
       width: 50,
       quality: 30,
       blur: 10
-    }
+    },
+
+    // Background image processing settings
+    processUnusedImages: true, // Process images not found in HTML for background use
+    imagePattern: '**/*.{jpg,jpeg,png,gif,webp,avif}' // Pattern to find images for background processing
   };
 
   // Special handling for formatOptions to ensure deep merging

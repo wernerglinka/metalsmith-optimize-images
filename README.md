@@ -1,6 +1,6 @@
 # metalsmith-optimize-images
 
-> **🚀 Release Candidate**: This plugin has achieved comprehensive test coverage (96.06%) and is ready for production testing. Feedback welcome before 1.0.0 release!
+> **🚀 Release Candidate**: This plugin has achieved comprehensive test coverage (95.27%) and is ready for production testing. Recent critical bug fixes have resolved recursive processing and AVIF format issues. Feedback welcome before 1.0.0 release!
 
 Metalsmith plugin for generating responsive images with optimal formats
 
@@ -15,6 +15,7 @@ Metalsmith plugin for generating responsive images with optimal formats
 
 - **Multiple image formats**: Generates AVIF and WebP variants with JPEG/PNG fallbacks
 - **Responsive sizes**: Creates different image sizes for various device widths
+- **Background image support**: Automatically processes unused images for CSS `image-set()` backgrounds
 - **Progressive loading**: Optional progressive image loading with low-quality placeholders
 - **Lazy loading**: Uses native browser lazy loading for better performance
 - **Content-based hashing**: Adds hash to filenames for optimal caching
@@ -86,6 +87,7 @@ metalsmith
 | `generateMetadata`    | `boolean`  | `false`                               | Generate a metadata JSON file at `{outputDir}/responsive-images-manifest.json` |
 | `isProgressive`       | `boolean`  | `false`                               | Enable progressive image loading         |
 | `placeholder`         | `object`   | See below                             | Placeholder image settings               |
+| `processUnusedImages` | `boolean`  | `true`                                | Process unused images for background use |
 
 ### Default Format Options
 
@@ -112,14 +114,21 @@ metalsmith
 
 ### Standard Mode (default)
 
-The plugin:
+The plugin operates in two phases:
 
+**Phase 1: HTML-Referenced Images**
 1. Scans HTML files for image tags
 2. Processes each image to create multiple sizes and formats
 3. Creates a content hash for each image for efficient caching
 4. Replaces `<img>` tags with responsive `<picture>` elements
 5. Adds width/height attributes to prevent layout shifts
 6. Implements native lazy loading for better performance
+
+**Phase 2: Background Images (when `processUnusedImages: true`)**
+1. Finds images that weren't processed in Phase 1
+2. Generates 1x/2x variants (half size and original size) for retina displays
+3. Creates all configured formats (AVIF, WebP, original)
+4. Suitable for use with CSS `image-set()` for background images
 
 ### Progressive Mode (experimental)
 
@@ -201,6 +210,82 @@ Add the `data-no-responsive` attribute to any image you don't want processed:
 ```html
 <img src="image.jpg" data-no-responsive alt="This image won't be processed" />
 ```
+
+## Background Images
+
+The plugin automatically processes images that aren't referenced in HTML for use as CSS background images. This feature is enabled by default (`processUnusedImages: true`).
+
+### How Background Processing Works
+
+After processing HTML-referenced images, the plugin:
+
+1. **Scans the Metalsmith files object** for all images
+2. **Excludes already-processed images** (those found during HTML scanning)
+3. **Excludes responsive variants** (generated images in the outputDir)
+4. **Generates 1x/2x variants** using actual image dimensions:
+   - **1x variant**: Half the original size for regular displays
+   - **2x variant**: Original image size for retina displays (sharper on high-DPI screens)
+5. **Creates all formats** (AVIF, WebP, original) for optimal browser support
+6. **No HTML replacement** - you manually write CSS with `image-set()`
+
+### Using Background Images with CSS
+
+For an image like `images/hero.jpg` (1920x1080 pixels), the plugin generates variants like:
+
+```
+assets/images/responsive/hero-960w.avif   (1x - half 960px width for regular displays)
+assets/images/responsive/hero-1920w.avif  (2x - original 1920px width, sharper on retina)
+assets/images/responsive/hero-960w.webp   (1x - half 960px width for regular displays)
+assets/images/responsive/hero-1920w.webp  (2x - original 1920px width, sharper on retina)
+assets/images/responsive/hero-960w.jpg    (1x - half 960px width for regular displays)
+assets/images/responsive/hero-1920w.jpg   (2x - original 1920px width, sharper on retina)
+```
+
+**Note**: Background images are generated **without hashes** for easier CSS authoring. HTML images still include hashes for cache-busting.
+
+Use them in CSS with `image-set()`:
+
+```css
+.hero {
+  background-image: image-set(
+    url("/assets/images/responsive/hero-960w.avif") 1x,
+    url("/assets/images/responsive/hero-1920w.avif") 2x,
+    url("/assets/images/responsive/hero-960w.webp") 1x,
+    url("/assets/images/responsive/hero-1920w.webp") 2x,
+    url("/assets/images/responsive/hero-960w.jpg") 1x,
+    url("/assets/images/responsive/hero-1920w.jpg") 2x
+  );
+  background-size: cover;
+  background-position: center;
+}
+```
+
+### Background Image Configuration
+
+```javascript
+metalsmith.use(
+  optimizeImages({
+    // Standard HTML image processing
+    widths: [320, 640, 960, 1280, 1920],
+    formats: ['avif', 'webp', 'original'],
+    
+    // Background image processing
+    processUnusedImages: true, // Enable background processing
+    
+    // Generate metadata to see all variants
+    generateMetadata: true
+  })
+);
+```
+
+### Benefits of Background Image Processing
+
+- **Automatic format optimization** - Browser selects best supported format
+- **Retina display support** - 2x variants provide crisp images on high-DPI screens
+- **Smart sizing** - Uses actual image dimensions instead of arbitrary widths
+- **No manual work** - Plugin automatically finds and processes unused images in Metalsmith files object
+- **Consistent workflow** - Same formats and quality settings as HTML images
+- **Efficient processing** - Parallel processing of sizes and formats
 
 ## Progressive Loading
 
@@ -351,6 +436,14 @@ metalsmith.env('DEBUG', 'metalsmith-optimize-images*');
 }
 ```
 
+## Recent Updates
+
+### Bug Fixes (January 2025)
+
+- **🚫 Fixed Recursive Processing**: Resolved critical issue where the background image processor was finding already-generated responsive images and reprocessing them recursively, creating malformed filenames like `image-320w-640w-960w.jpg`
+- **🚫 Fixed HEIF Extension Issue**: Fixed Sharp.js AVIF processing that was sometimes generating `.heif` extensions instead of `.avif` 
+- **✅ Enhanced Background Image Filtering**: Added comprehensive filtering to prevent responsive variants from being treated as source images
+
 ## Feedback & Testing
 
 This plugin is approaching 1.0.0 and we'd love your feedback! Please test and report:
@@ -362,10 +455,11 @@ This plugin is approaching 1.0.0 and we'd love your feedback! Please test and re
 - **Memory usage**: Resource consumption in your environment
 - **Cross-platform consistency**: Image quality and file sizes across platforms
 - **Progressive loading**: Behavior across different browsers
+- **Background image processing**: Testing the new `image-set()` feature with CSS backgrounds
 
 ### Current Status
 
-- ✅ 96.06% test coverage with comprehensive edge case handling
+- ✅ 95.27% test coverage with comprehensive edge case handling
 - ✅ Real Metalsmith integration tests (no mocks)
 - ✅ Tested on macOS with Node.js 18+
 - 🔄 Seeking broader platform validation
@@ -382,6 +476,6 @@ MIT
 [metalsmith-url]: https://metalsmith.io
 [license-badge]: https://img.shields.io/github/license/wernerglinka/metalsmith-optimize-images
 [license-url]: LICENSE
-[coverage-badge]: https://img.shields.io/badge/test%20coverage-96%25-brightgreen
+[coverage-badge]: https://img.shields.io/badge/test%20coverage-95%25-brightgreen
 [coverage-url]: https://github.com/wernerglinka/metalsmith-optimize-images/actions/workflows/test.yml
 [modules-badge]: https://img.shields.io/badge/modules-ESM%2FCJS-blue

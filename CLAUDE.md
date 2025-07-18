@@ -8,11 +8,17 @@ This is a Metalsmith plugin that generates responsive images with optimal format
 
 **✅ ACHIEVED**: This plugin has reached comprehensive test coverage and is ready for broader testing.
 
+### Recent Bug Fixes (January 2025)
+- **🚫 Fixed Recursive Processing**: Resolved critical issue where background image processor was finding already-generated responsive images and reprocessing them recursively, creating malformed filenames like `image-320w-640w-960w.jpg`
+- **🚫 Fixed HEIF Extension Issue**: Fixed Sharp.js AVIF processing that was sometimes generating `.heif` extensions instead of `.avif`
+- **✅ Enhanced Background Image Filtering**: Added comprehensive filtering to prevent responsive variants from being treated as source images
+
 ### Test Coverage Status
-- **Current**: **96.06% test coverage** (exceeds target)
+- **Current**: **95.27% test coverage** (exceeds target)
 - **Target**: >95% test coverage ✅ **ACHIEVED**
 - **Method**: Comprehensive test suite implemented with real Metalsmith instances
 - **Testing Philosophy**: Uses real Metalsmith instances instead of mocks for better integration testing
+- **Clean output**: Debug statements removed from tests for professional test results
 
 ## Architecture
 
@@ -66,6 +72,16 @@ This is a Metalsmith plugin that generates responsive images with optimal format
 - Modern `createImageBitmap()` format detection for reliable AVIF/WebP support
 - Maintains correct aspect ratios using original image dimensions
 
+### Background Image Processing (Fully Implemented)
+- **Two-phase processing**: HTML-referenced images first, then unused images
+- **Automatic detection**: Finds images in Metalsmith files object that weren't processed during HTML scanning
+- **1x/2x variants**: Generates original size (1x) and half-size (2x) for retina displays
+- **CSS integration**: Creates variants optimized for `image-set()` usage with proper retina support
+- **Format optimization**: All configured formats (AVIF, WebP, original)
+- **Performance control**: Can be disabled via `processUnusedImages: false`
+- **Smart processing**: Uses actual image dimensions instead of arbitrary widths
+- **Hashless filenames**: Background images generated without hashes for easier CSS authoring
+
 ### Performance Optimizations
 - **Parallel processing**: Multiple images processed simultaneously
 - **Caching**: Identical images (same file + mtime) processed once
@@ -88,7 +104,8 @@ This is a Metalsmith plugin that generates responsive images with optimal format
   dimensionAttributes: true,                     // Add width/height
   concurrency: 5,                                // Parallel processing limit
   generateMetadata: false,                       // JSON manifest file
-  isProgressive: false                           // Progressive loading mode
+  isProgressive: false,                          // Progressive loading mode
+  processUnusedImages: true                      // Process images not found in HTML
 }
 ```
 

@@ -140,8 +140,6 @@ describe( 'metalsmith-optimize-images', function () {
         assert.strictEqual( $highRes.attr( 'src' ), '', 'High-res src should be empty initially' );
         assert.strictEqual( !!$highRes.attr( 'data-source' ), true, 'High-res should have data-source' );
 
-        console.log( 'Generated HTML structure:' );
-        console.log( $wrapper.html() );
 
         done();
       } );

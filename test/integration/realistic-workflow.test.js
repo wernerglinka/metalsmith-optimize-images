@@ -70,7 +70,6 @@ describe( 'Realistic workflow integration tests', function () {
             assert.strictEqual( fs.existsSync( responsiveDir ), true, 'Responsive images directory should exist' );
 
             const responsiveFiles = fs.readdirSync( responsiveDir );
-            console.log( `Generated ${responsiveFiles.length} responsive image files` );
 
             // Count different formats
             const avifFiles = responsiveFiles.filter( ( f ) => f.endsWith( '.avif' ) );
@@ -78,9 +77,6 @@ describe( 'Realistic workflow integration tests', function () {
             const jpegFiles = responsiveFiles.filter( ( f ) => f.endsWith( '.jpg' ) );
             const pngFiles = responsiveFiles.filter( ( f ) => f.endsWith( '.png' ) );
 
-            console.log(
-              `Formats generated: AVIF=${avifFiles.length}, WebP=${webpFiles.length}, JPEG=${jpegFiles.length}, PNG=${pngFiles.length}`
-            );
 
             // Verify we have multiple formats
             assert.strictEqual( avifFiles.length > 0, true, 'Should generate AVIF files' );
@@ -91,7 +87,6 @@ describe( 'Realistic workflow integration tests', function () {
             const pictureElements = $( 'picture' );
             const processedImages = pictureElements.length;
 
-            console.log( `Processed ${processedImages} images into picture elements` );
             assert.strictEqual( processedImages > 0, true, 'Should have picture elements' );
 
             // Verify picture element structure
@@ -153,7 +148,6 @@ describe( 'Realistic workflow integration tests', function () {
             const metadataKeys = Object.keys( metadata );
             assert.strictEqual( metadataKeys.length > 0, true, 'Metadata should contain image information' );
 
-            console.log( `Metadata generated for ${metadataKeys.length} images` );
 
             // Verify file sizes are reasonable
             responsiveFiles.forEach( ( file ) => {

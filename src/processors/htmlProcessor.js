@@ -186,9 +186,13 @@ export async function processHtmlFile( htmlFile, fileData, files, metalsmith, pr
  */
 export function generateMetadata( processedImages, files, config ) {
   const metadataObj = {};
-  processedImages.forEach( ( variants, key ) => {
+  processedImages.forEach( ( value, key ) => {
     // Extract the original path from the cache key (path:mtime)
     const [path] = key.split( ':' );
+    
+    // Handle both array format (from background processing) and object format (from HTML processing)
+    const variants = Array.isArray( value ) ? value : value.variants;
+    
     metadataObj[path] = variants.map( ( v ) => ( {
       path: v.path,
       width: v.width,
