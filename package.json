@@ -45,8 +45,7 @@
   ],
   "files": [
     "lib",
-    "README.md",
-    "LICENSE.md"
+    "README.md"
   ],
   "author": "Werner Glinka <werner@glinka.co>",
   "license": "MIT",

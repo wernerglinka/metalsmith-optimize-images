@@ -185,12 +185,6 @@ Enable debug logging:
 DEBUG=metalsmith-optimize-images* npm run build
 ```
 
-## Known Limitations
-
-1. **Progressive mode timeout issues** in test environment (hence `isProgressive: false` by default)
-2. **Large image processing** can be memory-intensive with high concurrency
-3. **Build directory dependency** - requires images to be copied before processing
-
 ## Testing Philosophy
 
 ### Real Instances Over Mocks
