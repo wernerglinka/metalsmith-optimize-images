@@ -1,12 +1,14 @@
 # DEBUG: Background Image Processing - FULLY RESOLVED ✅
 
 ## Context
+
 We've successfully implemented the **background image processing** feature for the metalsmith-optimize-images plugin. The feature works in two phases:
 
 1. **Phase 1**: Process HTML-referenced images → Replace with `<picture>` elements
 2. **Phase 2**: Process "unused" images → Generate 1x/2x variants for CSS `image-set()` backgrounds
 
 ## Status: FULLY RESOLVED ✅
+
 - ✅ HTML processing works perfectly
 - ✅ Background processing now works correctly with proper 1x/2x variants
 - ✅ All configured formats (AVIF, WebP, original) are generated
@@ -18,6 +20,7 @@ We've successfully implemented the **background image processing** feature for t
 **Function**: `processUnusedImages()` and `processBackgroundImageVariants()`
 
 **Logic**:
+
 1. Get images processed during HTML scanning from `processedImages` Map
 2. Find all images in Metalsmith files object
 3. Filter out already-processed images and responsive variants
@@ -32,32 +35,28 @@ We've successfully implemented the **background image processing** feature for t
 **Key Insight**: Background processing works by scanning the Metalsmith files object to find images that weren't processed during HTML scanning.
 
 **Final Logic**:
+
 ```javascript
 // Find all images in Metalsmith files object
-const allImageFiles = Object.keys(files).filter(file => 
-  imageExtensions.some(ext => file.toLowerCase().endsWith(ext))
+const allImageFiles = Object.keys(files).filter((file) =>
+  imageExtensions.some((ext) => file.toLowerCase().endsWith(ext))
 );
 
 // Filter out processed images and responsive variants
-const unprocessedImages = allImageFiles.filter(file => {
+const unprocessedImages = allImageFiles.filter((file) => {
   // Skip responsive variants (in outputDir)
   if (file.startsWith(config.outputDir + '/')) return false;
-  
+
   // Skip already processed images
   if (processedImagePaths.has(file)) return false;
-  
+
   return true;
 });
 
 // Process each image with actual dimensions
 for (const imagePath of unprocessedImages) {
   const imageBuffer = files[imagePath].contents;
-  const variants = await processBackgroundImageVariants(
-    imageBuffer, 
-    imagePath, 
-    debug, 
-    config
-  );
+  const variants = await processBackgroundImageVariants(imageBuffer, imagePath, debug, config);
 }
 ```
 
@@ -79,12 +78,14 @@ assets/images/responsive/header1-500w.jpeg   (2x - half 500px, sharper on retina
 ## Test Results
 
 **All 83 tests passing** including:
+
 - Background image processing with proper 1x/2x variants
 - All configured formats (AVIF, WebP, original)
 - Testbed simulation showing 20 background variants generated
 - No duplicate processing or infinite loops
 
 ## Performance Improvements
+
 - ✅ Parallel processing of sizes and formats
 - ✅ Efficient use of Metalsmith files object
 - ✅ No artificial delays needed
@@ -93,6 +94,7 @@ assets/images/responsive/header1-500w.jpeg   (2x - half 500px, sharper on retina
 ## Configuration
 
 **Simplified configuration** (removed obsolete options):
+
 ```javascript
 {
   processUnusedImages: true,  // Enable background processing
@@ -104,15 +106,16 @@ assets/images/responsive/header1-500w.jpeg   (2x - half 500px, sharper on retina
 ## CSS Usage
 
 Perfect for modern CSS `image-set()`:
+
 ```css
 .hero {
   background-image: image-set(
-    url("/assets/images/responsive/hero-1920w.avif") 1x,
-    url("/assets/images/responsive/hero-960w.avif") 2x,
-    url("/assets/images/responsive/hero-1920w.webp") 1x,
-    url("/assets/images/responsive/hero-960w.webp") 2x,
-    url("/assets/images/responsive/hero-1920w.jpg") 1x,
-    url("/assets/images/responsive/hero-960w.jpg") 2x
+    url('/assets/images/responsive/hero-1920w.avif') 1x,
+    url('/assets/images/responsive/hero-960w.avif') 2x,
+    url('/assets/images/responsive/hero-1920w.webp') 1x,
+    url('/assets/images/responsive/hero-960w.webp') 2x,
+    url('/assets/images/responsive/hero-1920w.jpg') 1x,
+    url('/assets/images/responsive/hero-960w.jpg') 2x
   );
 }
 ```

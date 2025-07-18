@@ -70,24 +70,24 @@ metalsmith
 
 ## Options
 
-| Option                | Type       | Default                               | Description                              |
-| --------------------- | ---------- | ------------------------------------- | ---------------------------------------- |
-| `widths`              | `number[]` | `[320, 640, 960, 1280, 1920]`         | Image sizes to generate                  |
-| `formats`             | `string[]` | `['avif', 'webp', 'original']`        | Image formats in order of preference     |
-| `formatOptions`       | `object`   | See below                             | Format-specific compression settings     |
-| `htmlPattern`         | `string`   | `**/*.html`                           | Glob pattern to match HTML files         |
-| `imgSelector`         | `string`   | `img:not([data-no-responsive])`       | CSS selector for images to process       |
-| `outputDir`           | `string`   | `assets/images/responsive`            | Where to store the responsive images     |
-| `outputPattern`       | `string`   | `[filename]-[width]w-[hash].[format]` | Filename pattern with tokens             |
-| `skipLarger`          | `boolean`  | `true`                                | Don't upscale images                     |
-| `lazy`                | `boolean`  | `true`                                | Use native lazy loading                  |
-| `dimensionAttributes` | `boolean`  | `true`                                | Add width/height to prevent layout shift |
-| `sizes`               | `string`   | `(max-width: 768px) 100vw, 75vw`      | Default sizes attribute                  |
-| `concurrency`         | `number`   | `5`                                   | Process N images at a time               |
+| Option                | Type       | Default                               | Description                                                                    |
+| --------------------- | ---------- | ------------------------------------- | ------------------------------------------------------------------------------ |
+| `widths`              | `number[]` | `[320, 640, 960, 1280, 1920]`         | Image sizes to generate                                                        |
+| `formats`             | `string[]` | `['avif', 'webp', 'original']`        | Image formats in order of preference                                           |
+| `formatOptions`       | `object`   | See below                             | Format-specific compression settings                                           |
+| `htmlPattern`         | `string`   | `**/*.html`                           | Glob pattern to match HTML files                                               |
+| `imgSelector`         | `string`   | `img:not([data-no-responsive])`       | CSS selector for images to process                                             |
+| `outputDir`           | `string`   | `assets/images/responsive`            | Where to store the responsive images                                           |
+| `outputPattern`       | `string`   | `[filename]-[width]w-[hash].[format]` | Filename pattern with tokens                                                   |
+| `skipLarger`          | `boolean`  | `true`                                | Don't upscale images                                                           |
+| `lazy`                | `boolean`  | `true`                                | Use native lazy loading                                                        |
+| `dimensionAttributes` | `boolean`  | `true`                                | Add width/height to prevent layout shift                                       |
+| `sizes`               | `string`   | `(max-width: 768px) 100vw, 75vw`      | Default sizes attribute                                                        |
+| `concurrency`         | `number`   | `5`                                   | Process N images at a time                                                     |
 | `generateMetadata`    | `boolean`  | `false`                               | Generate a metadata JSON file at `{outputDir}/responsive-images-manifest.json` |
-| `isProgressive`       | `boolean`  | `false`                               | Enable progressive image loading         |
-| `placeholder`         | `object`   | See below                             | Placeholder image settings               |
-| `processUnusedImages` | `boolean`  | `true`                                | Process unused images for background use |
+| `isProgressive`       | `boolean`  | `false`                               | Enable progressive image loading                                               |
+| `placeholder`         | `object`   | See below                             | Placeholder image settings                                                     |
+| `processUnusedImages` | `boolean`  | `true`                                | Process unused images for background use                                       |
 
 ### Default Format Options
 
@@ -117,6 +117,7 @@ metalsmith
 The plugin operates in two phases:
 
 **Phase 1: HTML-Referenced Images**
+
 1. Scans HTML files for image tags
 2. Processes each image to create multiple sizes and formats
 3. Creates a content hash for each image for efficient caching
@@ -125,6 +126,7 @@ The plugin operates in two phases:
 6. Implements native lazy loading for better performance
 
 **Phase 2: Background Images (when `processUnusedImages: true`)**
+
 1. Finds images that weren't processed in Phase 1
 2. Generates 1x/2x variants (half size and original size) for retina displays
 3. Creates all configured formats (AVIF, WebP, original)
@@ -248,12 +250,12 @@ Use them in CSS with `image-set()`:
 ```css
 .hero {
   background-image: image-set(
-    url("/assets/images/responsive/hero-960w.avif") 1x,
-    url("/assets/images/responsive/hero-1920w.avif") 2x,
-    url("/assets/images/responsive/hero-960w.webp") 1x,
-    url("/assets/images/responsive/hero-1920w.webp") 2x,
-    url("/assets/images/responsive/hero-960w.jpg") 1x,
-    url("/assets/images/responsive/hero-1920w.jpg") 2x
+    url('/assets/images/responsive/hero-960w.avif') 1x,
+    url('/assets/images/responsive/hero-1920w.avif') 2x,
+    url('/assets/images/responsive/hero-960w.webp') 1x,
+    url('/assets/images/responsive/hero-1920w.webp') 2x,
+    url('/assets/images/responsive/hero-960w.jpg') 1x,
+    url('/assets/images/responsive/hero-1920w.jpg') 2x
   );
   background-size: cover;
   background-position: center;
@@ -268,10 +270,10 @@ metalsmith.use(
     // Standard HTML image processing
     widths: [320, 640, 960, 1280, 1920],
     formats: ['avif', 'webp', 'original'],
-    
+
     // Background image processing
     processUnusedImages: true, // Enable background processing
-    
+
     // Generate metadata to see all variants
     generateMetadata: true
   })
@@ -398,7 +400,7 @@ When `generateMetadata: true` is enabled, the plugin creates a JSON file at `{ou
       "size": 8432
     },
     {
-      "path": "assets/images/responsive/hero-320w-a1b2c3d4.webp", 
+      "path": "assets/images/responsive/hero-320w-a1b2c3d4.webp",
       "width": 320,
       "height": 180,
       "format": "webp",
@@ -409,6 +411,7 @@ When `generateMetadata: true` is enabled, the plugin creates a JSON file at `{ou
 ```
 
 This manifest is useful for:
+
 - **Debugging**: Verify which variants were generated
 - **Integration**: Use variant information in other tools
 - **Performance analysis**: Compare file sizes across formats
@@ -441,7 +444,7 @@ metalsmith.env('DEBUG', 'metalsmith-optimize-images*');
 ### Bug Fixes (January 2025)
 
 - **🚫 Fixed Recursive Processing**: Resolved critical issue where the background image processor was finding already-generated responsive images and reprocessing them recursively, creating malformed filenames like `image-320w-640w-960w.jpg`
-- **🚫 Fixed HEIF Extension Issue**: Fixed Sharp.js AVIF processing that was sometimes generating `.heif` extensions instead of `.avif` 
+- **🚫 Fixed HEIF Extension Issue**: Fixed Sharp.js AVIF processing that was sometimes generating `.heif` extensions instead of `.avif`
 - **✅ Enhanced Background Image Filtering**: Added comprehensive filtering to prevent responsive variants from being treated as source images
 
 ## Feedback & Testing

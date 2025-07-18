@@ -27,12 +27,12 @@ function deepMerge( target, source ) {
 
 // Modern functional approach to deep merge - handles nested objects properly
 // This is needed for formatOptions and placeholder options which are nested objects
-const deepMerge = ( target, source ) =>
-  Object.keys( source ).reduce(
-    ( acc, key ) => ( {
+const deepMerge = (target, source) =>
+  Object.keys(source).reduce(
+    (acc, key) => ({
       ...acc,
-      [key]: source[key]?.constructor === Object ? deepMerge( target[key] || {}, source[key] ) : source[key]
-    } ),
+      [key]: source[key]?.constructor === Object ? deepMerge(target[key] || {}, source[key]) : source[key]
+    }),
     { ...target }
   );
 
@@ -41,7 +41,7 @@ const deepMerge = ( target, source ) =>
  * @param {Object} options - User provided plugin options
  * @return {Object} - Complete config with defaults
  */
-export function buildConfig( options = {} ) {
+export function buildConfig(options = {}) {
   // Default configuration with sensible defaults
   const defaults = {
     // Responsive breakpoints to generate
@@ -107,22 +107,22 @@ export function buildConfig( options = {} ) {
   // Special handling for formatOptions to ensure deep merging
   // This allows users to override specific format settings without losing defaults
   // e.g., { formatOptions: { jpeg: { quality: 90 } } } only changes JPEG quality
-  if ( options && options.formatOptions ) {
+  if (options && options.formatOptions) {
     options = {
       ...options,
-      formatOptions: deepMerge( defaults.formatOptions, options.formatOptions )
+      formatOptions: deepMerge(defaults.formatOptions, options.formatOptions)
     };
   }
 
   // Special handling for placeholder options to ensure deep merging
   // Allows partial placeholder config like { placeholder: { width: 100 } }
-  if ( options && options.placeholder ) {
+  if (options && options.placeholder) {
     options = {
       ...options,
-      placeholder: deepMerge( defaults.placeholder, options.placeholder )
+      placeholder: deepMerge(defaults.placeholder, options.placeholder)
     };
   }
 
   // Merge the defaults with user options
-  return { ...defaults, ...( options || {} ) };
+  return { ...defaults, ...(options || {}) };
 }

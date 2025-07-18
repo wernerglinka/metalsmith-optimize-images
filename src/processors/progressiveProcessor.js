@@ -14,23 +14,23 @@ import path from 'path';
  * @param {Object} metalsmith - Metalsmith instance
  * @return {Promise<Object>} Placeholder data with path and contents
  */
-export async function generatePlaceholder( imagePath, imageBuffer, placeholderConfig, metalsmith ) {
+export async function generatePlaceholder(imagePath, imageBuffer, placeholderConfig, metalsmith) {
   const { width, quality, blur } = placeholderConfig;
 
   try {
     // Get original image dimensions for aspect ratio calculation
-    const image = sharp( imageBuffer );
+    const image = sharp(imageBuffer);
     const metadata = await image.metadata();
 
     // Process image: resize to small width, blur heavily, compress heavily
     const processed = await image
-      .resize( width ) // Default: 50px wide
-      .blur( blur ) // Default: 10px blur
-      .jpeg( { quality } ) // Default: 30% quality
+      .resize(width) // Default: 50px wide
+      .blur(blur) // Default: 10px blur
+      .jpeg({ quality }) // Default: 30% quality
       .toBuffer();
 
-    const fileName = `${path.basename( imagePath, path.extname( imagePath ) )}-placeholder.jpg`;
-    const outputPath = path.join( 'assets/images/responsive', fileName );
+    const fileName = `${path.basename(imagePath, path.extname(imagePath))}-placeholder.jpg`;
+    const outputPath = path.join('assets/images/responsive', fileName);
 
     return {
       path: outputPath,
@@ -39,8 +39,8 @@ export async function generatePlaceholder( imagePath, imageBuffer, placeholderCo
       originalWidth: metadata.width,
       originalHeight: metadata.height
     };
-  } catch ( error ) {
-    metalsmith.debug( 'metalsmith-optimize-images' )( `Error generating placeholder for ${imagePath}: ${error.message}` );
+  } catch (error) {
+    metalsmith.debug('metalsmith-optimize-images')(`Error generating placeholder for ${imagePath}: ${error.message}`);
     throw error;
   }
 }
@@ -55,67 +55,67 @@ export async function generatePlaceholder( imagePath, imageBuffer, placeholderCo
  * @param {Object} config - Plugin configuration
  * @return {Object} Cheerio element for progressive wrapper
  */
-export function createProgressiveWrapper( $, $img, variants, placeholderData, _config ) {
+export function createProgressiveWrapper($, $img, variants, placeholderData, _config) {
   // Get original attributes
-  const alt = $img.attr( 'alt' ) || '';
-  const className = $img.attr( 'class' ) || '';
+  const alt = $img.attr('alt') || '';
+  const className = $img.attr('class') || '';
 
   // Group variants by format - use only original format for progressive mode
   // Progressive mode focuses on smooth loading rather than format optimization
   const variantsByFormat = {};
-  variants.forEach( ( v ) => {
-    if ( !variantsByFormat[v.format] ) {
+  variants.forEach((v) => {
+    if (!variantsByFormat[v.format]) {
       variantsByFormat[v.format] = [];
     }
-    variantsByFormat[v.format].push( v );
-  } );
+    variantsByFormat[v.format].push(v);
+  });
 
   // Get original format variants (skip AVIF/WebP for progressive mode)
   // JavaScript will handle format detection dynamically
-  const originalFormat = Object.keys( variantsByFormat ).find( ( f ) => f !== 'avif' && f !== 'webp' );
+  const originalFormat = Object.keys(variantsByFormat).find((f) => f !== 'avif' && f !== 'webp');
   const originalVariants = originalFormat ? variantsByFormat[originalFormat] : [];
 
-  if ( originalVariants.length === 0 ) {
+  if (originalVariants.length === 0) {
     return $img.clone(); // Fallback if no variants
   }
 
   // Calculate aspect ratio using original image dimensions to prevent layout shift
   // Fallback to variant dimensions if placeholderData doesn't have original dimensions
   let aspectRatio;
-  if ( placeholderData.originalWidth && placeholderData.originalHeight ) {
+  if (placeholderData.originalWidth && placeholderData.originalHeight) {
     aspectRatio = `${placeholderData.originalWidth}/${placeholderData.originalHeight}`;
   } else {
     // Fallback: use the largest variant for most accurate aspect ratio
-    const largestVariant = [...originalVariants].sort( ( a, b ) => b.width - a.width )[0];
+    const largestVariant = [...originalVariants].sort((a, b) => b.width - a.width)[0];
     aspectRatio = `${largestVariant.width}/${largestVariant.height}`;
   }
 
   // Find middle-sized variant for high-res image (good balance of quality/size)
-  const highResVariant = originalVariants[Math.floor( originalVariants.length / 2 )];
+  const highResVariant = originalVariants[Math.floor(originalVariants.length / 2)];
 
   // Create wrapper div with modern CSS aspect-ratio
-  const $wrapper = $( '<div>' )
-    .addClass( 'responsive-wrapper js-progressive-image-wrapper' )
-    .attr( 'style', `aspect-ratio: ${aspectRatio}` );
+  const $wrapper = $('<div>')
+    .addClass('responsive-wrapper js-progressive-image-wrapper')
+    .attr('style', `aspect-ratio: ${aspectRatio}`);
 
   // Add class from original image if present
-  if ( className ) {
-    $wrapper.addClass( className );
+  if (className) {
+    $wrapper.addClass(className);
   }
 
   // Create low-res image (placeholder) - shown immediately
-  const $lowRes = $( '<img>' ).addClass( 'low-res' ).attr( 'src', `/${placeholderData.path}` ).attr( 'alt', alt );
+  const $lowRes = $('<img>').addClass('low-res').attr('src', `/${placeholderData.path}`).attr('alt', alt);
 
   // Create high-res image (empty with data source) - loaded by JavaScript
-  const $highRes = $( '<img>' )
-    .addClass( 'high-res' )
-    .attr( 'src', '' )
-    .attr( 'alt', alt )
-    .attr( 'data-source', `/${highResVariant.path}` );
+  const $highRes = $('<img>')
+    .addClass('high-res')
+    .attr('src', '')
+    .attr('alt', alt)
+    .attr('data-source', `/${highResVariant.path}`);
 
   // Assemble the progressive wrapper
-  $lowRes.appendTo( $wrapper );
-  $highRes.appendTo( $wrapper );
+  $lowRes.appendTo($wrapper);
+  $highRes.appendTo($wrapper);
 
   return $wrapper;
 }
@@ -129,73 +129,73 @@ export function createProgressiveWrapper( $, $img, variants, placeholderData, _c
  * @param {Object} config - Plugin configuration
  * @return {Object} Cheerio element for picture
  */
-export function createStandardPicture( $, $img, variants, config ) {
+export function createStandardPicture($, $img, variants, config) {
   // Get original attributes
-  const src = $img.attr( 'src' );
-  const alt = $img.attr( 'alt' ) || '';
-  const className = $img.attr( 'class' ) || '';
-  const sizesAttr = $img.attr( 'sizes' ) || config.sizes;
+  const src = $img.attr('src');
+  const alt = $img.attr('alt') || '';
+  const className = $img.attr('class') || '';
+  const sizesAttr = $img.attr('sizes') || config.sizes;
 
   // Group variants by format
   const variantsByFormat = {};
-  variants.forEach( ( v ) => {
-    if ( !variantsByFormat[v.format] ) {
+  variants.forEach((v) => {
+    if (!variantsByFormat[v.format]) {
       variantsByFormat[v.format] = [];
     }
-    variantsByFormat[v.format].push( v );
-  } );
+    variantsByFormat[v.format].push(v);
+  });
 
   // Create picture element with all formats (standard mode)
-  const $picture = $( '<picture>' );
+  const $picture = $('<picture>');
 
   // Add format-specific source elements in preference order
-  ['avif', 'webp'].forEach( ( format ) => {
+  ['avif', 'webp'].forEach((format) => {
     const formatVariants = variantsByFormat[format];
-    if ( !formatVariants || formatVariants.length === 0 ) {
+    if (!formatVariants || formatVariants.length === 0) {
       return;
     }
 
     // Sort variants by width
-    formatVariants.sort( ( a, b ) => a.width - b.width );
+    formatVariants.sort((a, b) => a.width - b.width);
 
     // Create srcset string
-    const srcset = formatVariants.map( ( v ) => `/${v.path} ${v.width}w` ).join( ', ' );
+    const srcset = formatVariants.map((v) => `/${v.path} ${v.width}w`).join(', ');
 
     // Create source element
-    $( '<source>' ).attr( 'type', `image/${format}` ).attr( 'srcset', srcset ).attr( 'sizes', sizesAttr ).appendTo( $picture );
-  } );
+    $('<source>').attr('type', `image/${format}`).attr('srcset', srcset).attr('sizes', sizesAttr).appendTo($picture);
+  });
 
   // Add original format as img element
-  const originalFormat = Object.keys( variantsByFormat ).find( ( f ) => f !== 'avif' && f !== 'webp' );
+  const originalFormat = Object.keys(variantsByFormat).find((f) => f !== 'avif' && f !== 'webp');
 
-  if ( originalFormat && variantsByFormat[originalFormat] ) {
+  if (originalFormat && variantsByFormat[originalFormat]) {
     const formatVariants = variantsByFormat[originalFormat];
-    formatVariants.sort( ( a, b ) => a.width - b.width );
+    formatVariants.sort((a, b) => a.width - b.width);
 
-    const srcset = formatVariants.map( ( v ) => `/${v.path} ${v.width}w` ).join( ', ' );
-    const defaultSrc = formatVariants[Math.floor( formatVariants.length / 2 )]?.path;
+    const srcset = formatVariants.map((v) => `/${v.path} ${v.width}w`).join(', ');
+    const defaultSrc = formatVariants[Math.floor(formatVariants.length / 2)]?.path;
 
     // Create new img element
-    const $newImg = $( '<img>' )
-      .attr( 'src', defaultSrc ? `/${defaultSrc}` : src )
-      .attr( 'srcset', srcset )
-      .attr( 'sizes', sizesAttr )
-      .attr( 'alt', alt )
-      .attr( 'loading', 'lazy' );
+    const $newImg = $('<img>')
+      .attr('src', defaultSrc ? `/${defaultSrc}` : src)
+      .attr('srcset', srcset)
+      .attr('sizes', sizesAttr)
+      .attr('alt', alt)
+      .attr('loading', 'lazy');
 
     // Add class if present
-    if ( className ) {
-      $newImg.attr( 'class', className );
+    if (className) {
+      $newImg.attr('class', className);
     }
 
     // Add width/height attributes if configured and available
-    if ( config.dimensionAttributes && variants.length > 0 ) {
-      const largestVariant = [...variants].sort( ( a, b ) => b.width - a.width )[0];
-      $newImg.attr( 'width', largestVariant.width );
-      $newImg.attr( 'height', largestVariant.height );
+    if (config.dimensionAttributes && variants.length > 0) {
+      const largestVariant = [...variants].sort((a, b) => b.width - a.width)[0];
+      $newImg.attr('width', largestVariant.width);
+      $newImg.attr('height', largestVariant.height);
     }
 
-    $newImg.appendTo( $picture );
+    $newImg.appendTo($picture);
   }
 
   return $picture;
