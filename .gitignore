@@ -60,3 +60,4 @@ jspm_packages/
 # Project specific
 /notes/
 **/.claude/settings.local.json
+.c8rc.json
