@@ -11,7 +11,7 @@ import crypto from 'crypto';
  * @return {string} - A short hash string (8 characters)
  */
 export function generateHash( buffer ) {
-  // MD5 is sufficient for cache-busting (not cryptographic security)
+  // SHA-256 for cache-busting - using secure algorithm to satisfy security scanners
   // Only use first 8 characters to keep filenames manageable
-  return crypto.createHash( 'md5' ).update( buffer ).digest( 'hex' ).slice( 0, 8 );
+  return crypto.createHash( 'sha256' ).update( buffer ).digest( 'hex' ).slice( 0, 8 );
 }
