@@ -11,7 +11,7 @@
     "release": true,
     "releaseName": "v${version}",
     "draft": false,
-    "autoGenerate": true,
+    "releaseNotes": "npx auto-changelog -u --commit-limit false --ignore-commit-pattern '^((dev|chore|ci):|Release)' --stdout --starting-version ${version} --ending-version ${version}",
     "tokenRef": "GH_TOKEN"
   },
   "npm": {
@@ -23,6 +23,7 @@
       "npm test",
       "npm run lint"
     ],
+    "after:bump": "npx auto-changelog -p --commit-limit false --ignore-commit-pattern '^((dev|chore|ci):|Release)' && git add CHANGELOG.md",
     "after:release": "echo \"✅ Successfully released ${name} v${version}\""
   }
 }
