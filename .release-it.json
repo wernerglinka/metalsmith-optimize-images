@@ -1,7 +1,7 @@
 {
   "git": {
     "commitMessage": "chore: release v${version}",
-    "requireCleanWorkingDir": true,
+    "requireCleanWorkingDir": false,
     "requireBranch": "main",
     "tag": true,
     "tagName": "v${version}",
@@ -15,8 +15,7 @@
     "tokenRef": "GH_TOKEN"
   },
   "npm": {
-    "publish": true,
-    "publishPath": "."
+    "publish": false
   },
   "hooks": {
     "before:init": [
