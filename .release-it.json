@@ -1,25 +1,29 @@
 {
+  "git": {
+    "commitMessage": "chore: release v${version}",
+    "requireCleanWorkingDir": true,
+    "requireBranch": "main",
+    "tag": true,
+    "tagName": "v${version}",
+    "push": true
+  },
   "github": {
     "release": true,
-    "releaseName": "metalsmith-optimize-images ${version}",
-    "tokenRef": "GITHUB_TOKEN",
-    "assets": ["metalsmith-optimize-images-*.tgz", "CHANGELOG.md"],
-    "releaseNotes": "cat CHANGELOG.md"
-  },
-  "git": {
-    "commitMessage": "Release ${version}",
-    "commitArgs": ["-S"],
-    "tagAnnotation": "Release ${version}",
-    "tagArgs": ["-s"],
-    "changelog": "npx auto-changelog -u --commit-limit false --ignore-commit-pattern '^((dev|chore|ci):|Release)' --stdout -t https://raw.githubusercontent.com/release-it/release-it/master/templates/changelog-compact.hbs"
-  },
-  "hooks": {
-    "before:init": ["npm run lint", "npm test"],
-    "after:bump": "npx auto-changelog -p --commit-limit false --ignore-commit-pattern '^((dev|chore|ci):|Release)' && git add CHANGELOG.md",
-    "before:github:release": "echo 'Creating tarball...' && npm pack && echo 'Listing tarballs:' && ls -la *.tgz || echo 'No tarballs found'",
-    "after:release": "echo Successfully released ${name} v${version} to ${repo.repository}."
+    "releaseName": "v${version}",
+    "draft": false,
+    "autoGenerate": true,
+    "tokenRef": "GH_TOKEN"
   },
   "npm": {
-    "publish": false
+    "publish": true,
+    "publishPath": "."
+  },
+  "hooks": {
+    "before:init": [
+      "gh auth status",
+      "npm test",
+      "npm run lint"
+    ],
+    "after:release": "echo \"✅ Successfully released ${name} v${version}\""
   }
 }
