@@ -3,6 +3,35 @@
  * @module metalsmith-optimize-images
  */
 
+/**
+ * @typedef {Object} Options
+ * @property {number[]} [widths=[320, 640, 960, 1280, 1920]] - Array of image widths to generate
+ * @property {string[]} [formats=['avif', 'webp', 'original']] - Array of image formats to generate (in order of preference)
+ * @property {Object} [formatOptions] - Format-specific compression settings
+ * @property {Object} [formatOptions.avif] - AVIF compression options
+ * @property {Object} [formatOptions.webp] - WebP compression options
+ * @property {Object} [formatOptions.jpeg] - JPEG compression options
+ * @property {Object} [formatOptions.png] - PNG compression options
+ * @property {string} [htmlPattern='**\/*.html'] - Glob pattern to match HTML files
+ * @property {string} [imgSelector='img:not([data-no-responsive])'] - CSS selector for images to process
+ * @property {string} [outputDir='assets/images/responsive'] - Output directory for processed images
+ * @property {string} [outputPattern='[filename]-[width]w-[hash].[format]'] - Output naming pattern
+ * @property {boolean} [skipLarger=true] - Whether to skip generating sizes larger than original
+ * @property {boolean} [lazy=true] - Whether to add loading="lazy" to images
+ * @property {boolean} [dimensionAttributes=true] - Whether to add width/height attributes
+ * @property {string} [sizes] - Default sizes attribute
+ * @property {number} [concurrency=5] - Maximum number of images to process in parallel
+ * @property {boolean} [generateMetadata=false] - Whether to generate a metadata JSON file
+ * @property {boolean} [isProgressive=false] - Whether to use progressive image loading
+ * @property {Object} [placeholder] - Placeholder image settings for progressive loading
+ * @property {number} [placeholder.width=50] - Placeholder image width
+ * @property {number} [placeholder.quality=30] - Placeholder image quality
+ * @property {number} [placeholder.blur=10] - Placeholder image blur amount
+ * @property {boolean} [processUnusedImages=true] - Whether to process unused images for background use
+ * @property {string} [imagePattern='**\/*.{jpg,jpeg,png,gif,webp,avif}'] - Glob pattern to find images for background processing
+ * @property {string} [imageFolder='lib/assets/images'] - Folder to scan for background images, relative to source
+ */
+
 import path from 'path';
 import fs from 'fs';
 import * as mkdirp from 'mkdirp';
@@ -14,33 +43,8 @@ import { processHtmlFile, generateMetadata } from './processors/htmlProcessor.js
  * Creates a responsive images plugin for Metalsmith
  * Generates multiple sizes and formats of images and replaces img tags with picture elements
  *
- * @param {Object} options - Configuration options for the plugin
- * @param {number[]} [options.widths] - Array of image widths to generate
- * @param {string[]} [options.formats] - Array of image formats to generate (in order of preference)
- * @param {Object} [options.formatOptions] - Format-specific compression settings
- * @param {Object} [options.formatOptions.avif] - AVIF compression options
- * @param {Object} [options.formatOptions.webp] - WebP compression options
- * @param {Object} [options.formatOptions.jpeg] - JPEG compression options
- * @param {Object} [options.formatOptions.png] - PNG compression options
- * @param {string} [options.htmlPattern] - Glob pattern to match HTML files
- * @param {string} [options.imgSelector] - CSS selector for images to process
- * @param {string} [options.outputDir] - Output directory for processed images
- * @param {string} [options.outputPattern] - Output naming pattern
- * @param {boolean} [options.skipLarger] - Whether to skip generating sizes larger than original
- * @param {boolean} [options.lazy] - Whether to add loading="lazy" to images
- * @param {boolean} [options.dimensionAttributes] - Whether to add width/height attributes
- * @param {string} [options.sizes] - Default sizes attribute
- * @param {number} [options.concurrency] - Maximum number of images to process in parallel
- * @param {boolean} [options.generateMetadata] - Whether to generate a metadata JSON file
- * @param {boolean} [options.isProgressive] - Whether to use progressive image loading (default: true)
- * @param {Object} [options.placeholder] - Placeholder image settings for progressive loading
- * @param {number} [options.placeholder.width] - Placeholder image width (default: 50)
- * @param {number} [options.placeholder.quality] - Placeholder image quality (default: 30)
- * @param {number} [options.placeholder.blur] - Placeholder image blur amount (default: 10)
- * @param {boolean} [options.processUnusedImages] - Whether to process unused images for background use (default: true)
- * @param {string} [options.imagePattern] - Glob pattern to find images for background processing (default: `**\/*.{jpg,jpeg,png,gif,webp,avif}`)
- * @param {string} [options.imageFolder] - Folder to scan for background images, relative to source (default: 'lib/assets/images')
- * @return {Function} - Metalsmith plugin function
+ * @param {Options} [options={}] - Configuration options for the plugin
+ * @returns {import('metalsmith').Plugin} - Metalsmith plugin function
  */
 function optimizeImagesPlugin( options = {} ) {
   // Build configuration with defaults and user options
@@ -529,5 +533,10 @@ function generateBackgroundVariantPath( originalPath, width, format, config ) {
 
   return path.join( config.outputDir, outputName );
 }
+
+// Set function name for better debugging
+Object.defineProperty( optimizeImagesPlugin, 'name', { 
+  value: 'metalsmith-optimize-images' 
+} );
 
 export default optimizeImagesPlugin;

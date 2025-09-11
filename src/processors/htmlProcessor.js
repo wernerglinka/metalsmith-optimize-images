@@ -133,6 +133,13 @@ export function replacePictureElement( $, $img, variants, config ) {
  */
 export async function processHtmlFile( htmlFile, fileData, files, metalsmith, processedImages, debug, config ) {
   debug( `Processing HTML file: ${htmlFile}` );
+  
+  // Validate file.contents before processing
+  if ( !fileData.contents || !Buffer.isBuffer( fileData.contents ) ) {
+    debug( `Skipping ${htmlFile}: invalid or missing file contents` );
+    return;
+  }
+  
   const content = fileData.contents.toString();
 
   // Parse HTML
