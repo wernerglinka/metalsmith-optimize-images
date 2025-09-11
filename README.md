@@ -1,7 +1,5 @@
 # metalsmith-optimize-images
 
-> **🚀 Release Candidate**: This plugin has achieved comprehensive test coverage (95.27%) and is ready for production testing. Recent critical bug fixes have resolved recursive processing and AVIF format issues. Feedback welcome before 1.0.0 release!
-
 Metalsmith plugin for generating responsive images with optimal formats
 
 [![metalsmith:plugin][metalsmith-badge]][metalsmith-url]
