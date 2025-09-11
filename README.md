@@ -11,16 +11,18 @@ Metalsmith plugin for generating responsive images with optimal formats
 [![ESM/CommonJS][modules-badge]][npm-url]
 [![Known Vulnerabilities](https://snyk.io/test/npm/metalsmith-optimize-images/badge.svg)](https://snyk.io/test/npm/metalsmith-optimize-images)
 
+> This Metalsmith plugin is under active development. The API is stable, but breaking changes may occur before reaching 1.0.0.
+
 ## Features
 
 - **Multiple image formats**: Generates AVIF and WebP variants with JPEG/PNG fallbacks
 - **Responsive sizes**: Creates different image sizes for various device widths
 - **Background image support**: Automatically processes unused images for CSS `image-set()` backgrounds
 - **Progressive loading**: Optional progressive image loading with low-quality placeholders
-- **Lazy loading**: Uses native browser lazy loading for better performance
+- **Lazy loading**: Uses native browser lazy loading
 - **Content-based hashing**: Adds hash to filenames for optimal caching
 - **Layout shift prevention**: Adds width/height attributes
-- **Parallel processing**: Processes images in parallel for faster builds
+- **Parallel processing**: Processes images in parallel
 - **Metadata generation**: Creates a JSON manifest with image information and variants
 - **Configurable compression**: Customize compression settings per format
 - **ESM and CommonJS support**:
@@ -32,20 +34,6 @@ Metalsmith plugin for generating responsive images with optimal formats
 ```bash
 npm install metalsmith-optimize-images
 ```
-
-## Requirements
-
-- Node.js >=18.0.0
-- Metalsmith >=2.5.0
-
-## Platform Testing Status
-
-- ✅ **macOS**: Fully tested and working
-- 🔄 **Windows**: Seeking community feedback on Sharp.js compatibility
-- 🔄 **Linux**: Seeking validation across different distributions
-- 🔄 **CI/CD**: Testing in various containerized environments
-
-**Help us reach 1.0.0**: If you test this plugin on Windows, Linux, or in production environments, please [share your experience](https://github.com/wernerglinka/metalsmith-optimize-images/issues)!
 
 ## Usage
 
@@ -228,7 +216,6 @@ After processing HTML-referenced images, the plugin:
    - **1x variant**: Half the original size for regular displays
    - **2x variant**: Original image size for retina displays (sharper on high-DPI screens)
 5. **Creates all formats** (AVIF, WebP, original) for optimal browser support
-6. **No HTML replacement** - you manually write CSS with `image-set()`
 
 ### Using Background Images with CSS
 
@@ -284,10 +271,8 @@ metalsmith.use(
 
 - **Automatic format optimization** - Browser selects best supported format
 - **Retina display support** - 2x variants provide crisp images on high-DPI screens
-- **Smart sizing** - Uses actual image dimensions instead of arbitrary widths
 - **No manual work** - Plugin automatically finds and processes unused images in Metalsmith files object
 - **Consistent workflow** - Same formats and quality settings as HTML images
-- **Efficient processing** - Parallel processing of sizes and formats
 
 ## Progressive Loading
 
@@ -439,39 +424,19 @@ metalsmith.env('DEBUG', 'metalsmith-optimize-images*');
 }
 ```
 
-## Recent Updates
-
-### Bug Fixes (January 2025)
-
-- **🚫 Fixed Recursive Processing**: Resolved critical issue where the background image processor was finding already-generated responsive images and reprocessing them recursively, creating malformed filenames like `image-320w-640w-960w.jpg`
-- **🚫 Fixed HEIF Extension Issue**: Fixed Sharp.js AVIF processing that was sometimes generating `.heif` extensions instead of `.avif`
-- **✅ Enhanced Background Image Filtering**: Added comprehensive filtering to prevent responsive variants from being treated as source images
-
-## Feedback & Testing
-
-This plugin is approaching 1.0.0 and we'd love your feedback! Please test and report:
-
-### Especially Needed
-
-- **Windows compatibility**: Sharp.js native compilation and image processing
-- **Large image batches**: Performance with 50+ images
-- **Memory usage**: Resource consumption in your environment
-- **Cross-platform consistency**: Image quality and file sizes across platforms
-- **Progressive loading**: Behavior across different browsers
-- **Background image processing**: Testing the new `image-set()` feature with CSS backgrounds
-
-### Current Status
-
-- ✅ 95.27% test coverage with comprehensive edge case handling
-- ✅ Real Metalsmith integration tests (no mocks)
-- ✅ Tested on macOS with Node.js 18+
-- 🔄 Seeking broader platform validation
-
-**Report issues or success stories**: [GitHub Issues](https://github.com/wernerglinka/metalsmith-optimize-images/issues)
-
 ## License
 
 MIT
+
+## Development transparency
+
+Portions of this project were developed with the assistance of AI tools including Claude and Claude Code. These tools were used to:
+
+- Generate or refactor code
+- Assist with documentation
+- Troubleshoot bugs and explore alternative approaches
+
+All AI-assisted code has been reviewed and tested to ensure it meets project standards. See the included [CLAUDE.md](CLAUDE.md) file for more details.
 
 [npm-badge]: https://img.shields.io/npm/v/metalsmith-optimize-images.svg
 [npm-url]: https://www.npmjs.com/package/metalsmith-optimize-images
