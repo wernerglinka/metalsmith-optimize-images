@@ -52,7 +52,8 @@ describe( 'Coverage gap tests - targeting missing lines', function () {
         .use(
           optimizeImages( {
             htmlPattern: '**/*.nonexistent', // Pattern that matches nothing
-            isProgressive: false
+            isProgressive: false,
+            processUnusedImages: false // Disable to prevent timeout on GitHub Actions
           } )
         )
         .build( ( err ) => {
