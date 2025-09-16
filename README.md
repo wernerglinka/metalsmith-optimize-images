@@ -199,6 +199,32 @@ Add the `data-no-responsive` attribute to any image you don't want processed:
 <img src="image.jpg" data-no-responsive alt="This image won't be processed" />
 ```
 
+## Supported File Types
+
+The plugin automatically processes raster images and skips vector graphics:
+
+### ✅ Processed
+- **JPEG** (`.jpg`, `.jpeg`)
+- **PNG** (`.png`)
+- **GIF** (`.gif`)
+- **WebP** (`.webp`)
+- **AVIF** (`.avif`)
+
+### ❌ Automatically Skipped
+- **SVG** (`.svg`) - Vector graphics don't need responsive raster variants
+- **External URLs** (http/https)
+- **Data URLs** (`data:image/...`)
+- **Images with `data-no-responsive` attribute**
+
+### Why SVGs are skipped
+
+SVG files are vector graphics that scale perfectly at any resolution without quality loss. Creating multiple raster sizes and formats from SVGs would:
+- Increase build time unnecessarily
+- Generate larger file sizes than the original vector
+- Lose the scalability benefits of SVG format
+
+If you have SVG logos or icons, they will remain untouched and work perfectly as-is.
+
 ## Background Images
 
 The plugin automatically processes images that aren't referenced in HTML for use as CSS background images. This feature is enabled by default (`processUnusedImages: true`).

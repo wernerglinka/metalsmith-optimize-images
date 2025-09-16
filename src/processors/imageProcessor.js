@@ -136,6 +136,12 @@ export async function processImage( {
     return;
   }
 
+  // Skip SVG files - they are vector graphics that don't need responsive raster variants
+  if ( src.toLowerCase().endsWith( '.svg' ) ) {
+    debug( `Skipping SVG file (vector graphics don't need responsive variants): ${src}` );
+    return;
+  }
+
   // Normalize src path to match Metalsmith files object keys
   // Remove leading slash if present (HTML paths vs Metalsmith file keys)
   const normalizedSrc = src.startsWith( '/' ) ? src.slice( 1 ) : src;

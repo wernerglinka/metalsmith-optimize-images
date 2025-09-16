@@ -177,6 +177,12 @@ npm run test:coverage  # Run tests with detailed coverage
 - **Concurrency limits**: Configurable to prevent system overload
 - **Lazy loading**: Native browser lazy loading support
 
+### Supported File Types
+
+- **✅ Processed**: JPG, JPEG, PNG, GIF, WebP, AVIF
+- **❌ Skipped**: SVG files (vector graphics don't need responsive raster variants)
+- **❌ Skipped**: External URLs (http/https), data URLs, files with `data-no-responsive` attribute
+
 ## Configuration
 
 ### Core Settings
@@ -305,6 +311,7 @@ This project follows a strict policy of **minimizing mocking** in favor of using
 2. **Memory issues**: Reduce concurrency setting for large images
 3. **Progressive loading not working**: Check browser console for JavaScript errors
 4. **Aspect ratio issues**: Verify placeholder generation includes original dimensions
+5. **SVG files being processed**: This plugin automatically skips SVG files since they are vector graphics that don't need responsive raster variants. If you see SVG processing, check your configuration or image paths.
 
 ### Debug Workflow
 
