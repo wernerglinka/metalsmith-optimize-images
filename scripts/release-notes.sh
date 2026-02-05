@@ -28,7 +28,7 @@ if git log --pretty=format:"- %s ([%h]($REPO_URL/commit/%H))" \
       --no-merges \
       --grep="^chore:" --grep="^ci:" --grep="^dev:" --invert-grep
 else
-    echo "- Initial release"
+    echo "- Project Maintenance"
 fi
 
 echo ""
