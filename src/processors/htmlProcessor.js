@@ -247,6 +247,14 @@ async function processProgressiveImage( { $, img, files, metalsmith, processedIm
       const destination = metalsmith.destination();
       const imagePath = path.join( destination, normalizedSrc );
 
+      // Security: Ensure resolved path stays within destination directory
+      const resolvedPath = path.resolve( imagePath );
+      const resolvedDestination = path.resolve( destination );
+      if ( !resolvedPath.startsWith( resolvedDestination + path.sep ) ) {
+        debug( `Skipping path traversal attempt: ${normalizedSrc}` );
+        return;
+      }
+
       if ( fs.existsSync( imagePath ) ) {
         // Load the image contents from the build directory
         const imageBuffer = fs.readFileSync( imagePath );
