@@ -1,29 +1,20 @@
 {
-  "git": {
-    "commitMessage": "chore: release v${version}",
-    "requireCleanWorkingDir": false,
-    "requireBranch": "main",
-    "tag": true,
-    "tagName": "v${version}",
-    "push": true
+  "hooks": {
+    "before:init": ["npm run lint", "npm test"],
+    "after:bump": "npx auto-changelog -p --commit-limit false --ignore-commit-pattern '^((dev|chore|ci):|Release)' && git add CHANGELOG.md",
+    "after:release": "echo Successfully released ${name} v${version} to ${repo.repository}."
   },
-  "github": {
-    "release": true,
-    "releaseName": "v${version}",
-    "draft": false,
-    "releaseNotes": "./scripts/release-notes.sh ${latestTag}",
-    "tokenRef": "GH_TOKEN"
+  "git": {
+    "commitMessage": "Release ${version}",
+    "tagAnnotation": "Release ${version}"
   },
   "npm": {
     "publish": false
   },
-  "hooks": {
-    "before:init": [
-      "gh auth status",
-      "npm test",
-      "npm run lint"
-    ],
-    "after:bump": "npx auto-changelog -p --commit-limit false --ignore-commit-pattern '^((dev|chore|ci):|Release)' && git add CHANGELOG.md",
-    "after:release": "echo \"✅ Successfully released ${name} v${version}\""
+  "github": {
+    "release": true,
+    "releaseName": "metalsmith-optimize-images ${version}",
+    "tokenRef": "GH_TOKEN",
+    "autoGenerate": true
   }
 }
