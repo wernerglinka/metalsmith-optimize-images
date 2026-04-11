@@ -101,7 +101,13 @@ export function buildConfig( options = {} ) {
 
     // Background image processing settings
     processUnusedImages: true, // Process images not found in HTML for background use
-    imagePattern: '**/*.{jpg,jpeg,png,gif,webp,avif}' // Pattern to find images for background processing
+    imagePattern: '**/*.{jpg,jpeg,png,gif,webp,avif}', // Pattern to find images for background processing
+
+    // Persistent cache directory for generated variants (relative to metalsmith.directory())
+    // false = disabled, true = default path ('lib/<outputDir>'), string = custom path
+    // When set, variants are written to this directory and loaded from it on subsequent builds.
+    // Commit this directory to git so CI/Netlify never needs to run Sharp.
+    cache: false
   };
 
   // Special handling for formatOptions to ensure deep merging

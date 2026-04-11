@@ -65,6 +65,32 @@ function optimizeImagesPlugin( options = {} ) {
       // Set up debug function for logging (uses 'DEBUG=metalsmith-optimize-images*' env var)
       const debug = metalsmith.debug( 'metalsmith-optimize-images' );
 
+      // Resolve persistent cache directory from config.
+      // When set (e.g., 'lib/assets/images/responsive'), variants are read/written there
+      // and the static-files plugin copies them to the build.
+      let cacheDir = null;
+      let sourcePrefix = null;
+
+      if ( config.cache ) {
+        // Normalise: cache: true → default path 'lib/<outputDir>'
+        const cachePath = typeof config.cache === 'string'
+          ? config.cache
+          : path.join( 'lib', config.outputDir );
+
+        cacheDir = path.resolve( metalsmith.directory(), cachePath );
+        mkdirp.mkdirpSync( cacheDir );
+
+        // Derive the source-asset prefix so the plugin can find images on disk
+        // when it runs before the static-files copy.
+        // e.g., cachePath='lib/assets/images/responsive', outputDir='assets/images/responsive'
+        //   → sourcePrefix = 'lib/' (the part of cachePath that precedes outputDir)
+        if ( cachePath.endsWith( config.outputDir ) ) {
+          sourcePrefix = cachePath.slice( 0, cachePath.length - config.outputDir.length );
+        }
+
+        debug( `Persistent cache: ${cacheDir}` );
+      }
+
       // Ensure the output directory exists where processed images will be saved
       mkdirp.mkdirpSync( outputPath );
 
@@ -108,7 +134,7 @@ function optimizeImagesPlugin( options = {} ) {
           await Promise.all(
             chunk.map( async ( htmlFile ) => {
               // This function parses HTML, finds images, processes them, and updates the HTML
-              await processHtmlFile( htmlFile, files[htmlFile], files, metalsmith, processedImages, debug, config );
+              await processHtmlFile( htmlFile, files[htmlFile], files, metalsmith, processedImages, debug, config, cacheDir, sourcePrefix );
             } )
           );
         } )
@@ -118,7 +144,7 @@ function optimizeImagesPlugin( options = {} ) {
       // This finds images that weren't processed during HTML scanning and creates variants
       // for use in CSS background-image with image-set()
       if ( config.processUnusedImages ) {
-        await processUnusedImages( files, metalsmith, processedImages, debug, config );
+        await processUnusedImages( files, metalsmith, processedImages, debug, config, cacheDir );
       }
 
       // Optional: Generate a JSON metadata file with information about all processed images
@@ -148,7 +174,7 @@ function optimizeImagesPlugin( options = {} ) {
  * @param {Object} config - Plugin configuration
  * @return {Promise<void>} - Promise that resolves when processing is complete
  */
-async function processUnusedImages( files, metalsmith, processedImages, debug, config ) {
+async function processUnusedImages( files, metalsmith, processedImages, debug, config, cacheDir ) {
   debug( 'Processing unused images for background image support' );
 
   // Get all image paths that were already processed during HTML scanning
@@ -178,14 +204,18 @@ async function processUnusedImages( files, metalsmith, processedImages, debug, c
         debug( `Processing background image: ${imageObj.path} (source: ${imageObj.source})` );
 
         // Generate background variants with original size and half size
-        const variants = await processBackgroundImageVariants( imageObj.buffer, imageObj.path, debug, config );
+        const variants = await processBackgroundImageVariants( imageObj.buffer, imageObj.path, debug, config, cacheDir );
 
-        // Save all generated variants to Metalsmith files object
-        variants.forEach( ( variant ) => {
-          files[variant.path] = {
-            contents: variant.buffer
-          };
-        } );
+        // When cache is configured, variant files are written to cacheDir by
+        // processBackgroundImageVariants and the static-files plugin copies them.
+        // Otherwise, add them to the files object directly.
+        if ( !cacheDir ) {
+          variants.forEach( ( variant ) => {
+            files[variant.path] = {
+              contents: variant.buffer
+            };
+          } );
+        }
 
         // Cache the variants (using current timestamp as mtime for unused images)
         const cacheKey = `${imageObj.path}:${Date.now()}`;
@@ -412,12 +442,24 @@ async function findUnprocessedImages( files, metalsmith, config, processedImageP
  * @param {string} originalPath - Original image path
  * @param {Function} debugFn - Debug function for logging
  * @param {Object} config - Plugin configuration
+ * @param {string} [cacheDir] - Absolute path to the persistent cache directory, or null
  * @return {Promise<Array<Object>>} - Array of generated variants
  */
-async function processBackgroundImageVariants( buffer, originalPath, debugFn, config ) {
+async function processBackgroundImageVariants( buffer, originalPath, debugFn, config, cacheDir ) {
   const image = sharp( buffer );
   const metadata = await image.metadata();
   const variants = [];
+
+  // Check if background variants already exist on disk from a previous build.
+  // Background filenames are deterministic (no content hash), so existence alone
+  // tells us the work was already done. If a source image changes content without
+  // changing filename, delete the responsive directory to force regeneration.
+  if ( cacheDir ) {
+    const cached = await loadCachedBgVariants( originalPath, metadata, config, cacheDir, debugFn );
+    if ( cached ) {
+      return cached;
+    }
+  }
 
   debugFn( `Processing background image ${originalPath}: ${metadata.width}x${metadata.height}` );
 
@@ -502,7 +544,82 @@ async function processBackgroundImageVariants( buffer, originalPath, debugFn, co
     variants.push( ...formatVariants );
   } );
 
+  // Persist newly generated variants to the cache directory so subsequent
+  // builds can skip Sharp entirely for these background images.
+  if ( cacheDir && variants.length > 0 ) {
+    for ( const variant of variants ) {
+      const cachePath = path.join( cacheDir, path.basename( variant.path ) );
+      fs.writeFileSync( cachePath, variant.buffer );
+    }
+    debugFn( `Wrote ${variants.length} background variants to cache for ${originalPath}` );
+  }
+
   debugFn( `Generated ${variants.length} background variants for ${originalPath}` );
+  return variants;
+}
+
+/**
+ * Loads previously generated background variants from the persistent cache directory.
+ * Checks that every expected variant file (size × format) exists on disk.
+ * Returns the loaded variants array, or null on any cache miss.
+ * @param {string} originalPath - Original image path
+ * @param {Object} sourceMetadata - Sharp metadata of the source image
+ * @param {Object} config - Plugin configuration
+ * @param {string} cacheDir - Absolute path to the persistent cache directory
+ * @param {Function} debugFn - Debug function
+ * @return {Promise<Array<Object>|null>} - Loaded variants or null on cache miss
+ */
+async function loadCachedBgVariants( originalPath, sourceMetadata, config, cacheDir, debugFn ) {
+  const sizes = [
+    { width: sourceMetadata.width, density: '1x' },
+    { width: Math.round( sourceMetadata.width / 2 ), density: '2x' }
+  ];
+
+  const expected = [];
+
+  for ( const size of sizes ) {
+    for ( const format of config.formats ) {
+      if ( format === 'original' && sourceMetadata.format.toLowerCase() === 'webp' ) {
+        continue;
+      }
+
+      let outputFormat = format;
+      if ( format === 'original' ) {
+        outputFormat = sourceMetadata.format.toLowerCase();
+      }
+
+      const variantPath = generateBackgroundVariantPath( originalPath, size.width, outputFormat, config );
+      const fullPath = path.join( cacheDir, path.basename( variantPath ) );
+      expected.push( { variantPath, fullPath, width: size.width, format: outputFormat, density: size.density } );
+    }
+  }
+
+  // Quick existence check — bail on first miss
+  for ( const ev of expected ) {
+    if ( !fs.existsSync( ev.fullPath ) ) {
+      return null;
+    }
+  }
+
+  // All variants found on disk, load them
+  debugFn( `Loading ${expected.length} cached background variants for ${originalPath}` );
+
+  // Compute height from the source aspect ratio instead of calling sharp().metadata()
+  // on every cached file — avoids spinning up Sharp entirely on cache hits.
+  const aspectRatio = sourceMetadata.height / sourceMetadata.width;
+
+  const variants = expected.map( ( ev ) => {
+    const buffer = fs.readFileSync( ev.fullPath );
+    return {
+      path: ev.variantPath,
+      buffer,
+      width: ev.width,
+      height: Math.round( ev.width * aspectRatio ),
+      format: ev.format,
+      density: ev.density
+    };
+  } );
+
   return variants;
 }
 

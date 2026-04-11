@@ -14,9 +14,10 @@ import { generateVariantPath } from '../utils/paths.js';
  * @param {string} originalPath - Original image path
  * @param {Function} debugFn - Debug function for logging
  * @param {Object} config - Plugin configuration
+ * @param {string} [cacheDir] - Absolute path to the persistent cache directory (e.g., lib/assets/images/responsive)
  * @return {Promise<Array<Object>>} - Array of generated variants
  */
-export async function processImageToVariants( buffer, originalPath, debugFn, config ) {
+export async function processImageToVariants( buffer, originalPath, debugFn, config, cacheDir ) {
   const image = sharp( buffer );
   const metadata = await image.metadata();
   const variants = [];
@@ -29,6 +30,16 @@ export async function processImageToVariants( buffer, originalPath, debugFn, con
   if ( targetWidths.length === 0 ) {
     debugFn( `Skipping ${originalPath} - no valid target widths` );
     return [];
+  }
+
+  // Check if all variants already exist in the persistent cache directory.
+  // The content hash in each filename ensures correctness — if the source image
+  // changes, the hash changes, filenames differ, and the cache misses naturally.
+  if ( cacheDir ) {
+    const cached = await loadCachedVariants( originalPath, hash, targetWidths, config, cacheDir, metadata, debugFn );
+    if ( cached ) {
+      return cached;
+    }
   }
 
   // Process all widths in parallel for better performance
@@ -102,6 +113,77 @@ export async function processImageToVariants( buffer, originalPath, debugFn, con
   const widthResults = await Promise.all( widthPromises );
   variants.push( ...widthResults.flat() );
 
+  // Persist newly generated variants to the cache directory so subsequent
+  // builds (local or CI) can skip Sharp entirely for this image.
+  if ( cacheDir && variants.length > 0 ) {
+    for ( const variant of variants ) {
+      const cachePath = path.join( cacheDir, path.basename( variant.path ) );
+      fs.writeFileSync( cachePath, variant.buffer );
+    }
+    debugFn( `Wrote ${variants.length} variants to cache for ${originalPath}` );
+  }
+
+  return variants;
+}
+
+/**
+ * Loads previously generated variants from the persistent cache directory.
+ * Variant files live directly in cacheDir (flat structure, no subdirectories).
+ * Returns the loaded variants array, or null on any cache miss.
+ * @param {string} originalPath - Original image path
+ * @param {string} hash - Content hash of the source image
+ * @param {number[]} targetWidths - Array of widths to check
+ * @param {Object} config - Plugin configuration
+ * @param {string} cacheDir - Absolute path to the cache directory (e.g., lib/assets/images/responsive)
+ * @param {Object} sourceMetadata - Sharp metadata of the source image
+ * @param {Function} debugFn - Debug function
+ * @return {Promise<Array<Object>|null>} - Loaded variants or null on cache miss
+ */
+async function loadCachedVariants( originalPath, hash, targetWidths, config, cacheDir, sourceMetadata, debugFn ) {
+  const expected = [];
+
+  for ( const width of targetWidths ) {
+    for ( const format of config.formats ) {
+      if ( format === 'original' && sourceMetadata.format.toLowerCase() === 'webp' ) {
+        continue;
+      }
+      const variantPath = generateVariantPath( originalPath, width, format, hash, config );
+      const fullPath = path.join( cacheDir, path.basename( variantPath ) );
+      expected.push( { variantPath, fullPath, width, format } );
+    }
+  }
+
+  // Quick existence check — bail on first miss
+  for ( const ev of expected ) {
+    if ( !fs.existsSync( ev.fullPath ) ) {
+      return null;
+    }
+  }
+
+  // All variants found on disk, load them
+  debugFn( `Loading ${expected.length} cached variants for ${originalPath}` );
+
+  // Compute height from the source aspect ratio instead of calling sharp().metadata()
+  // on every cached file — avoids spinning up Sharp entirely on cache hits.
+  const aspectRatio = sourceMetadata.height / sourceMetadata.width;
+
+  const variants = expected.map( ( ev ) => {
+    const buffer = fs.readFileSync( ev.fullPath );
+    const resolvedFormat = ev.format === 'original'
+      ? sourceMetadata.format.toLowerCase()
+      : ev.format;
+
+    return {
+      path: ev.variantPath,
+      buffer,
+      width: ev.width,
+      format: resolvedFormat,
+      originalFormat: sourceMetadata.format.toLowerCase(),
+      size: buffer.length,
+      height: Math.round( ev.width * aspectRatio )
+    };
+  } );
+
   return variants;
 }
 
@@ -116,6 +198,8 @@ export async function processImageToVariants( buffer, originalPath, debugFn, con
  * @param {Function} context.debug - Debug function
  * @param {Object} context.config - Plugin configuration
  * @param {Function} context.replacePictureElement - Function to replace img with picture
+ * @param {string|null} context.cacheDir - Resolved absolute path to persistent cache, or null
+ * @param {string|null} context.sourcePrefix - Prefix to map build paths to source asset paths on disk, or null
  * @return {Promise<void>} - Promise that resolves when the image is processed
  */
 export async function processImage( {
@@ -126,7 +210,9 @@ export async function processImage( {
   processedImages,
   debug,
   config,
-  replacePictureElement
+  replacePictureElement,
+  cacheDir,
+  sourcePrefix
 } ) {
   const $img = $( img );
   const src = $img.attr( 'src' );
@@ -146,39 +232,55 @@ export async function processImage( {
   // Remove leading slash if present (HTML paths vs Metalsmith file keys)
   const normalizedSrc = src.startsWith( '/' ) ? src.slice( 1 ) : src;
 
-  // Image not in Metalsmith files object - try to load it from the build directory
-  // This handles cases where images were copied by other plugins (like assets)
+  // Image not in Metalsmith files object — try alternative locations on disk
   if ( !files[normalizedSrc] ) {
-    try {
-      const destination = metalsmith.destination();
-      const imagePath = path.join( destination, normalizedSrc );
+    let loaded = false;
 
-      // Security: Ensure resolved path stays within destination directory
-      const resolvedPath = path.resolve( imagePath );
-      const resolvedDestination = path.resolve( destination );
-      if ( !resolvedPath.startsWith( resolvedDestination + path.sep ) ) {
-        debug( `Skipping path traversal attempt: ${normalizedSrc}` );
-        return;
+    // When cache is configured and the plugin runs before the static-files copy,
+    // source images live on disk at sourcePrefix + normalizedSrc
+    if ( sourcePrefix && !loaded ) {
+      try {
+        const sourcePath = path.resolve( metalsmith.directory(), sourcePrefix, normalizedSrc );
+        if ( fs.existsSync( sourcePath ) ) {
+          files[normalizedSrc] = {
+            contents: fs.readFileSync( sourcePath ),
+            mtime: fs.statSync( sourcePath ).mtimeMs
+          };
+          loaded = true;
+        }
+      } catch ( err ) {
+        debug( `Error loading source image from ${sourcePrefix}: ${err.message}` );
       }
+    }
 
-      if ( fs.existsSync( imagePath ) ) {
-        // Load the image contents from the build directory
-        const imageBuffer = fs.readFileSync( imagePath );
+    // Fallback: try the build directory (handles post-static-copy scenario)
+    if ( !loaded ) {
+      try {
+        const destination = metalsmith.destination();
+        const imagePath = path.join( destination, normalizedSrc );
 
-        // Get modification time for cache busting - this helps with incremental builds
-        const mtime = fs.statSync( imagePath ).mtimeMs;
+        // Security: Ensure resolved path stays within destination directory
+        const resolvedPath = path.resolve( imagePath );
+        const resolvedDestination = path.resolve( destination );
+        if ( !resolvedPath.startsWith( resolvedDestination + path.sep ) ) {
+          debug( `Skipping path traversal attempt: ${normalizedSrc}` );
+          return;
+        }
 
-        // Add it to Metalsmith files so the plugin can process it
-        files[normalizedSrc] = {
-          contents: imageBuffer,
-          mtime
-        };
-      } else {
-        debug( `Image not found in build: ${normalizedSrc}` );
-        return;
+        if ( fs.existsSync( imagePath ) ) {
+          files[normalizedSrc] = {
+            contents: fs.readFileSync( imagePath ),
+            mtime: fs.statSync( imagePath ).mtimeMs
+          };
+          loaded = true;
+        }
+      } catch ( err ) {
+        debug( `Error loading image from build directory: ${err.message}` );
       }
-    } catch ( err ) {
-      debug( `Error processing image from build directory: ${err.message}` );
+    }
+
+    if ( !loaded ) {
+      debug( `Image not found: ${normalizedSrc}` );
       return;
     }
   }
@@ -200,15 +302,18 @@ export async function processImage( {
 
   try {
     // Process image to generate all variants (different sizes and formats)
-    const variants = await processImageToVariants( files[normalizedSrc].contents, normalizedSrc, debug, config );
+    const variants = await processImageToVariants( files[normalizedSrc].contents, normalizedSrc, debug, config, cacheDir );
 
-    // Save all generated variants to Metalsmith files object
-    // This makes them available in the final build output
-    variants.forEach( ( variant ) => {
-      files[variant.path] = {
-        contents: variant.buffer
-      };
-    } );
+    // When cache is configured, variant files are written to cacheDir by
+    // processImageToVariants and the static-files plugin copies them to the build.
+    // When cache is NOT configured, add variants to the files object directly.
+    if ( !cacheDir ) {
+      variants.forEach( ( variant ) => {
+        files[variant.path] = {
+          contents: variant.buffer
+        };
+      } );
+    }
 
     // Cache variants for this image to avoid reprocessing
     processedImages.set( cacheKey, variants );

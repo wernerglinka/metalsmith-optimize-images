@@ -129,9 +129,11 @@ export function replacePictureElement( $, $img, variants, config ) {
  * @param {Map} processedImages - Cache of processed images
  * @param {Function} debug - Debug function
  * @param {Object} config - Plugin configuration
+ * @param {string|null} cacheDir - Resolved absolute path to persistent cache, or null
+ * @param {string|null} sourcePrefix - Prefix to map build paths to source asset paths on disk, or null
  * @return {Promise<void>} - Promise that resolves when the HTML file is processed
  */
-export async function processHtmlFile( htmlFile, fileData, files, metalsmith, processedImages, debug, config ) {
+export async function processHtmlFile( htmlFile, fileData, files, metalsmith, processedImages, debug, config, cacheDir, sourcePrefix ) {
   debug( `Processing HTML file: ${htmlFile}` );
   
   // Validate file.contents before processing
@@ -167,8 +169,8 @@ export async function processHtmlFile( htmlFile, fileData, files, metalsmith, pr
       await Promise.all(
         imageChunk.map( ( img ) =>
           config.isProgressive
-            ? processProgressiveImage( { $, img, files, metalsmith, processedImages, debug, config } )
-            : processImage( { $, img, files, metalsmith, processedImages, debug, config, replacePictureElement } )
+            ? processProgressiveImage( { $, img, files, metalsmith, processedImages, debug, config, cacheDir, sourcePrefix } )
+            : processImage( { $, img, files, metalsmith, processedImages, debug, config, replacePictureElement, cacheDir, sourcePrefix } )
         )
       );
     } )
@@ -221,7 +223,7 @@ export function generateMetadata( processedImages, files, config ) {
  * @param {Object} context - Processing context
  * @return {Promise<void>} - Promise that resolves when the image is processed
  */
-async function processProgressiveImage( { $, img, files, metalsmith, processedImages, debug, config } ) {
+async function processProgressiveImage( { $, img, files, metalsmith, processedImages, debug, config, cacheDir, sourcePrefix } ) {
   const $img = $( img );
   const src = $img.attr( 'src' );
 
@@ -241,38 +243,55 @@ async function processProgressiveImage( { $, img, files, metalsmith, processedIm
   // Normalize src path to match Metalsmith files object keys
   const normalizedSrc = src.startsWith( '/' ) ? src.slice( 1 ) : src;
 
-  // Image not in files, try to load it from the build directory (same logic as processImage)
+  // Image not in Metalsmith files object — try alternative locations on disk
   if ( !files[normalizedSrc] ) {
-    try {
-      const destination = metalsmith.destination();
-      const imagePath = path.join( destination, normalizedSrc );
+    let loaded = false;
 
-      // Security: Ensure resolved path stays within destination directory
-      const resolvedPath = path.resolve( imagePath );
-      const resolvedDestination = path.resolve( destination );
-      if ( !resolvedPath.startsWith( resolvedDestination + path.sep ) ) {
-        debug( `Skipping path traversal attempt: ${normalizedSrc}` );
-        return;
+    // When cache is configured and the plugin runs before the static-files copy,
+    // source images live on disk at sourcePrefix + normalizedSrc
+    if ( sourcePrefix && !loaded ) {
+      try {
+        const sourcePath = path.resolve( metalsmith.directory(), sourcePrefix, normalizedSrc );
+        if ( fs.existsSync( sourcePath ) ) {
+          files[normalizedSrc] = {
+            contents: fs.readFileSync( sourcePath ),
+            mtime: fs.statSync( sourcePath ).mtimeMs
+          };
+          loaded = true;
+        }
+      } catch ( err ) {
+        debug( `Error loading source image from ${sourcePrefix}: ${err.message}` );
       }
+    }
 
-      if ( fs.existsSync( imagePath ) ) {
-        // Load the image contents from the build directory
-        const imageBuffer = fs.readFileSync( imagePath );
+    // Fallback: try the build directory (handles post-static-copy scenario)
+    if ( !loaded ) {
+      try {
+        const destination = metalsmith.destination();
+        const imagePath = path.join( destination, normalizedSrc );
 
-        // Get modification time for cache busting
-        const mtime = fs.statSync( imagePath ).mtimeMs;
+        // Security: Ensure resolved path stays within destination directory
+        const resolvedPath = path.resolve( imagePath );
+        const resolvedDestination = path.resolve( destination );
+        if ( !resolvedPath.startsWith( resolvedDestination + path.sep ) ) {
+          debug( `Skipping path traversal attempt: ${normalizedSrc}` );
+          return;
+        }
 
-        // Add it to files so the plugin can process it
-        files[normalizedSrc] = {
-          contents: imageBuffer,
-          mtime
-        };
-      } else {
-        debug( `Image not found in build: ${normalizedSrc}` );
-        return;
+        if ( fs.existsSync( imagePath ) ) {
+          files[normalizedSrc] = {
+            contents: fs.readFileSync( imagePath ),
+            mtime: fs.statSync( imagePath ).mtimeMs
+          };
+          loaded = true;
+        }
+      } catch ( err ) {
+        debug( `Error loading image from build directory: ${err.message}` );
       }
-    } catch ( err ) {
-      debug( `Error processing image from build directory: ${err.message}` );
+    }
+
+    if ( !loaded ) {
+      debug( `Image not found: ${normalizedSrc}` );
       return;
     }
   }
@@ -294,7 +313,7 @@ async function processProgressiveImage( { $, img, files, metalsmith, processedIm
 
   try {
     // Process image to generate all variants (sizes and formats)
-    const variants = await processImageToVariants( files[normalizedSrc].contents, normalizedSrc, debug, config );
+    const variants = await processImageToVariants( files[normalizedSrc].contents, normalizedSrc, debug, config, cacheDir );
 
     // Generate low-quality placeholder image for smooth loading transitions
     const placeholderData = await generatePlaceholder(
@@ -304,14 +323,18 @@ async function processProgressiveImage( { $, img, files, metalsmith, processedIm
       metalsmith
     );
 
-    // Save all variants to Metalsmith files
-    variants.forEach( ( variant ) => {
-      files[variant.path] = {
-        contents: variant.buffer
-      };
-    } );
+    // When cache is configured, variant files are written to cacheDir by
+    // processImageToVariants and the static-files plugin copies them to the build.
+    // When cache is NOT configured, add variants to the files object directly.
+    if ( !cacheDir ) {
+      variants.forEach( ( variant ) => {
+        files[variant.path] = {
+          contents: variant.buffer
+        };
+      } );
+    }
 
-    // Save placeholder to files
+    // Save placeholder to files (always needed for progressive loading)
     files[placeholderData.path] = {
       contents: placeholderData.contents
     };
@@ -327,13 +350,15 @@ async function processProgressiveImage( { $, img, files, metalsmith, processedIm
 
     // Fallback to standard processing if progressive loading fails
     try {
-      const variants = await processImageToVariants( files[normalizedSrc].contents, normalizedSrc, debug, config );
+      const variants = await processImageToVariants( files[normalizedSrc].contents, normalizedSrc, debug, config, cacheDir );
 
-      variants.forEach( ( variant ) => {
-        files[variant.path] = {
-          contents: variant.buffer
-        };
-      } );
+      if ( !cacheDir ) {
+        variants.forEach( ( variant ) => {
+          files[variant.path] = {
+            contents: variant.buffer
+          };
+        } );
+      }
 
       const $picture = createStandardPicture( $, $img, variants, config );
       $img.replaceWith( $picture );
