@@ -49,6 +49,7 @@ metalsmith
       cache: true,
       widths: [320, 640, 960, 1280, 1920],
       formats: ['avif', 'webp', 'original']
+      
     })
   )
   .use(
