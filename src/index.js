@@ -40,6 +40,25 @@ import { buildConfig } from './utils/config.js';
 import { processHtmlFile, generateMetadata } from './processors/htmlProcessor.js';
 
 /**
+ * Assert that a user-supplied path option stays within a base directory.
+ * Guards against `outputDir`/`cache` escaping the build via `..` segments
+ * or an absolute path pointing elsewhere.
+ * @param {string} base - Directory the target must resolve inside
+ * @param {string} target - User-supplied path to validate
+ * @param {string} label - Option name, used in the error message
+ * @returns {string} The resolved, validated absolute target path
+ */
+function assertWithin( base, target, label ) {
+  const resolvedBase = path.resolve( base );
+  const resolvedTarget = path.resolve( resolvedBase, target );
+  const rel = path.relative( resolvedBase, resolvedTarget );
+  if ( rel === '..' || rel.startsWith( `..${path.sep}` ) || path.isAbsolute( rel ) ) {
+    throw new Error( `Invalid ${label}: "${target}" resolves outside the build directory` );
+  }
+  return resolvedTarget;
+}
+
+/**
  * Creates a responsive images plugin for Metalsmith
  * Generates multiple sizes and formats of images and replaces img tags with picture elements
  *
@@ -60,7 +79,7 @@ function optimizeImagesPlugin( options = {} ) {
   return async function optimizeImages( files, metalsmith, done ) {
     try {
       const destination = metalsmith.destination();
-      const outputPath = path.join( destination, config.outputDir );
+      const outputPath = assertWithin( destination, config.outputDir, 'outputDir' );
 
       // Set up debug function for logging (uses 'DEBUG=metalsmith-optimize-images*' env var)
       const debug = metalsmith.debug( 'metalsmith-optimize-images' );
@@ -77,7 +96,7 @@ function optimizeImagesPlugin( options = {} ) {
           ? config.cache
           : path.join( 'lib', config.outputDir );
 
-        cacheDir = path.resolve( metalsmith.directory(), cachePath );
+        cacheDir = assertWithin( metalsmith.directory(), cachePath, 'cache' );
         mkdirp.mkdirpSync( cacheDir );
 
         // Derive the source-asset prefix so the plugin can find images on disk
