@@ -6,9 +6,7 @@ Metalsmith plugin for generating responsive images with optimal formats
 [![npm: version][npm-badge]][npm-url]
 [![license: MIT][license-badge]][license-url]
 [![test coverage][coverage-badge]][coverage-url]
-[![ESM/CommonJS][modules-badge]][npm-url]
-
-> This Metalsmith plugin is under active development. The API is stable, but breaking changes may occur before reaching 1.0.0.
+[![ESM][modules-badge]][npm-url]
 
 > **Breaking change in 0.12.0**: When the persistent cache is enabled (`cache: true`), this plugin must now run **before** `metalsmith-static-files` in the pipeline, not after. The plugin writes variants to the source tree and the static-files plugin copies them to the build. See [Usage](#usage) for details.
 
@@ -25,15 +23,14 @@ Metalsmith plugin for generating responsive images with optimal formats
 - **Parallel processing**: Processes images in parallel
 - **Metadata generation**: Creates a JSON manifest with image information and variants
 - **Configurable compression**: Customize compression settings per format
-- **ESM and CommonJS support**:
-  - ESM: `import optimizeImages from 'metalsmith-optimize-images'`
-  - CommonJS: `const optimizeImages = require('metalsmith-optimize-images')`
 
 ## Installation
 
 ```bash
 npm install metalsmith-optimize-images
 ```
+
+This package is **ESM-only** and requires Node >= 22. CommonJS projects on Node 22 can still load it, because Node 22 lets `require` import ESM packages.
 
 ## Usage
 
@@ -554,4 +551,4 @@ All AI-assisted code has been reviewed and tested to ensure it meets project sta
 [license-url]: LICENSE
 [coverage-badge]: https://img.shields.io/badge/test%20coverage-93%25-brightgreen
 [coverage-url]: https://github.com/wernerglinka/metalsmith-optimize-images/actions/workflows/test.yml
-[modules-badge]: https://img.shields.io/badge/modules-ESM%2FCJS-blue
+[modules-badge]: https://img.shields.io/badge/module-ESM-blue

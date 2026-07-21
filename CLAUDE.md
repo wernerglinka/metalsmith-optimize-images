@@ -1,347 +1,159 @@
-# metalsmith-optimize-images
+# metalsmith-optimize-images - Development Context
+
+This file gives Claude operational context for working in this plugin. Plugin
+behavior is documented in [README.md](README.md) and the architecture
+rationale in [docs/THEORY.md](docs/THEORY.md) — don't duplicate them here.
 
 ## Project Overview
 
-This is a Metalsmith plugin that generates responsive images with optimal formats (AVIF, WebP, JPEG/PNG) and multiple sizes. It replaces standard `<img>` tags with responsive `<picture>` elements or progressive loading wrappers.
+Generates responsive image variants (AVIF/WebP with JPEG/PNG fallback, multiple
+widths) with Sharp and rewrites `<img>` tags into `<picture>` elements (or
+progressive-loading wrappers). Also processes unused images for CSS
+`image-set()` backgrounds, and can persist variants to a committed source-tree
+cache so repeat/CI builds skip Sharp. Code is split into `src/processors/`
+(image, html, progressive) and `src/utils/` (config, hash, paths).
 
+ESM-only Metalsmith plugin, published directly from `src/` (no build step),
+targeting Node.js 22+. CommonJS consumers can still `require()` it via
+Node 22's stable `require(esm)` support.
+
+Runtime dependencies (keep them): `sharp` (image processing), `cheerio` (HTML
+parsing), `mkdirp` (output directories).
 
 ## MCP Server Integration (CRITICAL)
 
-**IMPORTANT**: This plugin was created with `metalsmith-plugin-mcp-server`. When working on this plugin, AI assistants (Claude) MUST use the MCP server tools rather than creating their own implementations.
+**IMPORTANT**: This plugin was created with `metalsmith-plugin-mcp-server`.
+When working on this plugin, AI assistants (Claude) MUST use the MCP server
+tools rather than improvising equivalents.
 
 ### Essential MCP Commands
 
 ```bash
-# List all available templates
-list-templates
-
-# Get specific template content (use these exactly as provided)
-get-template plugin/CLAUDE.md
+list-templates                          # See what's available
+get-template plugin/CLAUDE.md           # Retrieve exact template content
+get-template configs/biome.json
 get-template configs/release-it.json
-get-template configs/eslint.config.js
-
-# Validate plugin and get actionable recommendations
-validate .
-
-# Generate configuration files
-configs .
-
-# Show recommended configuration templates
-show-template release-it
-show-template eslint
-
-# Update dependencies
-update-deps .
+validate .                              # Plugin validation + recommendations
+diff-template .                         # Drift check vs current scaffold
+configs .                               # Generate config files
+update-deps .                           # Dependency update
 ```
 
 ### CRITICAL RULES for AI Assistants
 
-1. **ALWAYS use MCP server templates verbatim** - Never create simplified versions
-2. **ALWAYS use `list-templates` first** to see what's available
-3. **ALWAYS use `get-template`** to retrieve exact template content
-4. **NEVER improvise or create custom implementations** when MCP server provides templates
-5. **When validation recommends templates**, use the exact commands provided
-6. **If a command seems unclear**, ask the user for clarification rather than improvising
+1. **Use MCP server templates verbatim** — never paraphrase or "simplify"
+2. **Run `list-templates` before guessing** at template names
+3. **When `validate` produces a recommendation, copy it exactly** — including
+   the exact command suggested
+4. **Ask the user** before modifying `.release-it.json`, `package.json`,
+   `biome.json`, or any other `.json` / `.yml` / `.config.js` file
+5. **Never set `npm.publish` to `true`** in `.release-it.json` — releases
+   here are deliberately manual
 
-### Common Mistakes to AVOID
+## Plugin Development Rules
 
-**❌ Wrong Approach:**
-- Creating custom CLAUDE.md content instead of using `get-template plugin/CLAUDE.md`
-- Scaffolding entire new plugins when you just need a template
-- Making up template content or "simplifying" official templates
-- Ignoring validation recommendations
-- Using commands like `npx metalsmith-plugin-mcp-server scaffold ./ CLAUDE.md claude-context`
+### Use Metalsmith's native methods
 
-**✅ Correct Approach:**
-- Use `list-templates` to see what's available
-- Use `get-template <template-name>` to get exact content
-- Follow validation recommendations exactly as provided
-- Ask for clarification when commands seem confusing
-- Always use official templates verbatim
-
-### Quick Commands
-
-**Quality & Validation:**
-```bash
-npx metalsmith-plugin-mcp-server validate . --functional  # Validate with MCP server
-npm test                                                   # Run tests with coverage
-npm run lint                                              # Lint and fix code
-```
-
-**Release Process:**
-```bash
-npm run release:patch   # Bug fixes (1.5.4 → 1.5.5)
-npm run release:minor   # New features (1.5.4 → 1.6.0)  
-npm run release:major   # Breaking changes (1.5.4 → 2.0.0)
-```
-
-**Development:**
-```bash
-npm run build          # Build ESM/CJS versions
-npm run test:coverage  # Run tests with detailed coverage
-```
-
-
-## Current Status
-
-**✅ ACHIEVED**: This plugin has reached comprehensive test coverage and is ready for broader testing.
-
-### Recent Bug Fixes (January 2025)
-
-- **🚫 Fixed Recursive Processing**: Resolved critical issue where background image processor was finding already-generated responsive images and reprocessing them recursively, creating malformed filenames like `image-320w-640w-960w.jpg`
-- **🚫 Fixed HEIF Extension Issue**: Fixed Sharp.js AVIF processing that was sometimes generating `.heif` extensions instead of `.avif`
-- **✅ Enhanced Background Image Filtering**: Added comprehensive filtering to prevent responsive variants from being treated as source images
-
-### Test Coverage Status
-
-- **Current**: **95.27% test coverage** (exceeds target)
-- **Target**: >95% test coverage ✅ **ACHIEVED**
-- **Method**: Comprehensive test suite implemented with real Metalsmith instances
-- **Testing Philosophy**: Uses real Metalsmith instances instead of mocks for better integration testing
-- **Clean output**: Debug statements removed from tests for professional test results
-
-## Architecture
-
-### Core Components
-
-#### Main Plugin (`src/index.js`)
-
-- Entry point that orchestrates the entire process
-- Handles configuration, file discovery, and parallel processing
-- Implements two-level parallelism: HTML files → Images within files
-- Manages output directory creation and metadata generation
-
-#### Image Processing (`src/processors/imageProcessor.js`)
-
-- Core Sharp.js operations for resizing and format conversion
-- Generates multiple sizes (320w, 640w, 960w, 1280w, 1920w by default)
-- Supports AVIF, WebP, and original formats with configurable quality
-- Implements intelligent caching to avoid reprocessing identical images
-- Handles images from both Metalsmith files and build directory
-
-#### HTML Processing (`src/processors/htmlProcessor.js`)
-
-- Parses HTML files using Cheerio
-- Finds images matching CSS selector (`img:not([data-no-responsive])`)
-- Replaces `<img>` tags with responsive `<picture>` elements
-- Supports both standard and progressive loading modes
-- Injects CSS/JavaScript for progressive loading when needed
-
-#### Progressive Loading (`src/processors/progressiveProcessor.js`)
-
-- **Experimental feature** for smooth image loading
-- Generates low-quality placeholders (small, blurred, compressed)
-- Creates wrapper elements with intersection observer loading
-- Uses modern `createImageBitmap()` for reliable format detection (AVIF/WebP support)
-- Provides CSS transitions for smooth placeholder → high-res transitions
-- Proper aspect ratio calculation using original image dimensions
-
-#### Utilities
-
-- **`config.js`**: Deep merges user options with sensible defaults
-- **`hash.js`**: Generates MD5 hashes for cache-busting filenames
-- **`paths.js`**: Handles filename pattern system with token replacement
-
-## Key Features
-
-### Standard Mode (Default)
-
-- Generates `<picture>` elements with multiple format sources
-- Browser automatically selects best supported format
-- Includes `loading="lazy"` for performance
-- Adds `width`/`height` attributes to prevent layout shift
-
-### Progressive Mode (Experimental)
-
-- Shows low-quality placeholder immediately
-- Loads high-resolution image when entering viewport
-- Smooth opacity transitions between placeholder and final image
-- Modern `createImageBitmap()` format detection for reliable AVIF/WebP support
-- Maintains correct aspect ratios using original image dimensions
-
-### Background Image Processing (Fully Implemented)
-
-- **Two-phase processing**: HTML-referenced images first, then unused images
-- **Automatic detection**: Finds images in Metalsmith files object that weren't processed during HTML scanning
-- **1x/2x variants**: Generates original size (1x) and half-size (2x) for retina displays
-- **CSS integration**: Creates variants optimized for `image-set()` usage with proper retina support
-- **Format optimization**: All configured formats (AVIF, WebP, original)
-- **Performance control**: Can be disabled via `processUnusedImages: false`
-- **Smart processing**: Uses actual image dimensions instead of arbitrary widths
-- **Hashless filenames**: Background images generated without hashes for easier CSS authoring
-
-### Performance Optimizations
-
-- **Parallel processing**: Multiple images processed simultaneously
-- **Caching**: Identical images (same file + mtime) processed once
-- **Concurrency limits**: Configurable to prevent system overload
-- **Lazy loading**: Native browser lazy loading support
-
-### Supported File Types
-
-- **✅ Processed**: JPG, JPEG, PNG, GIF, WebP, AVIF
-- **❌ Skipped**: SVG files (vector graphics don't need responsive raster variants)
-- **❌ Skipped**: External URLs (http/https), data URLs, files with `data-no-responsive` attribute
-
-## Configuration
-
-### Core Settings
+Prefer the methods Metalsmith provides on the instance over external
+packages:
 
 ```javascript
-{
-  widths: [320, 640, 960, 1280, 1920],           // Responsive breakpoints
-  formats: ['avif', 'webp', 'original'],         // Format preference order
-  htmlPattern: '**/*.html',                      // Files to process
-  imgSelector: 'img:not([data-no-responsive])',  // Image selector
-  outputDir: 'assets/images/responsive',         // Output directory
-  outputPattern: '[filename]-[width]w-[hash].[format]', // Naming pattern
-  skipLarger: true,                              // Don't upscale images
-  lazy: true,                                    // Add loading="lazy"
-  dimensionAttributes: true,                     // Add width/height
-  concurrency: 5,                                // Parallel processing limit
-  generateMetadata: false,                       // JSON manifest file
-  isProgressive: false,                          // Progressive loading mode
-  processUnusedImages: true                      // Process images not found in HTML
-}
+// ❌                                    // ✅
+require('debug')('')                     metalsmith.debug('')
+require('minimatch')(file, pattern)      metalsmith.match(pattern, file)
+process.env.NODE_ENV                     metalsmith.env('NODE_ENV')
+path.join(dir, file)                     metalsmith.path(file)
 ```
 
-### Format Options
+### Never mock Metalsmith in tests
 
-```javascript
-formatOptions: {
-  avif: { quality: 65, speed: 5 },
-  webp: { quality: 80, lossless: false },
-  jpeg: { quality: 85, progressive: true },
-  png: { compressionLevel: 8, palette: true }
-}
-```
+This plugin has a strict real-instances policy: tests use real `Metalsmith`
+instances and real Sharp/filesystem operations, never mocks, so they catch
+integration breaks. Mocking `metalsmith()`, `metalsmith.match`,
+`metalsmith.debug`, `metalsmith.env`, `metalsmith.path`, or plugin invocation
+has repeatedly hidden bugs that only surface in production. A couple of tests
+use narrow injection seams (a `destination()` stub for a build path, a debug
+capture to assert the namespace string) — those are not full-Metalsmith mocks.
 
-### Progressive Loading Settings
+Mocking unrelated systems (network) is fine; do NOT mock Sharp or fs here.
 
-```javascript
-placeholder: {
-  width: 50,      // Placeholder width in pixels
-  quality: 30,    // JPEG quality for placeholder
-  blur: 10        // Blur radius for placeholder
-}
-```
+### Metalsmith goes in devDependencies, never peerDependencies
 
-## Token System
+The plugin code never imports Metalsmith — it receives the instance as a
+parameter. Tests import Metalsmith directly. Users have their own install.
 
-The `outputPattern` supports these tokens:
+## Testing notes
 
-- `[filename]` - Original filename without extension
-- `[width]` - Target width (e.g., 320, 640)
-- `[format]` - Output format (avif, webp, jpeg, png)
-- `[hash]` - 8-character MD5 hash for cache-busting
+- Runner: `node --test`, native coverage. Real image processing is slow, so the
+  test timeout is **60s** (`--test-timeout=60000`), higher than the ecosystem
+  default of 15s. If a test file times out, that is usually genuine Sharp
+  slowness, not a hang.
+- Tests write to real working dirs (`test/build`, `test/temp-no-html`,
+  `test/unit/temp-build`). Those dirs are excluded from Biome in `biome.json`
+  so lint never reformats generated files.
+- `src/utils/config.js`'s `deepMerge` is a plain loop, not a spread-into-reduce
+  accumulator (Biome's `noAccumulatingSpread`). Keep it that way.
 
-Example: `[filename]-[width]w-[hash].[format]` → `hero-640w-abc12345.webp`
-
-## Integration Notes
-
-### Plugin Order
-
-**CRITICAL**: This plugin must run:
-
-1. **After** assets are copied (images must be available)
-2. **Before** final HTML processing or minification
-
-```javascript
-metalsmith
-  .use(assets({ source: 'lib/assets/', destination: 'assets/' }))
-  .use(
-    optimizeImages({
-      /* config */
-    })
-  )
-  .use(
-    htmlMinifier({
-      /* config */
-    })
-  );
-```
-
-### Debug Mode
-
-Enable debug logging:
+## Pre-commit workflow
 
 ```bash
-DEBUG=metalsmith-optimize-images* npm run build
+npm run lint       # Biome: lint + format with autofix
+npm run format     # Format only
+npm test           # node:test runner against src/
 ```
 
-## Testing Philosophy
+If any step fails, fix the underlying issue and re-run.
 
-### Real Instances Over Mocks
+## Release commands
 
-This project follows a strict policy of **minimizing mocking** in favor of using real Metalsmith instances:
+```bash
+npm run release:patch   # Bug fix
+npm run release:minor   # New feature, backwards-compatible
+npm run release:major   # Breaking change
+```
 
-- ✅ **Real Metalsmith instances** in all integration tests
-- ✅ **API compatibility** - tests break when Metalsmith API changes
-- ✅ **Complete behavior** - tests verify actual plugin integration
-- ✅ **Future-proof** - catches breaking changes automatically
+This plugin is at 1.0+, so standard semver applies: breaking changes are major
+releases. Releases use `./scripts/release.sh` (GitHub token via
+`gh auth token`); npm publishing is intentionally manual.
 
-### Current Test Coverage: 96.06%
+## Before releasing: re-read the user-facing docs
 
-- **76 tests** covering all major functionality
-- **Unit tests** for utilities and pure functions
-- **Integration tests** with real Metalsmith workflow
-- **Edge case coverage** for error handling and unusual configurations
-- **Performance tests** for parallel processing
+Before any `npm run release:*`, read [README.md](README.md) and
+[docs/THEORY.md](docs/THEORY.md) end-to-end and fix anything that has drifted
+from `src/` — option names/defaults, the cache pipeline-ordering guidance, and
+the token list for `outputPattern`. If a release has no user-visible surface,
+say so rather than inventing drift.
 
-## Future Improvements
+## File organization
 
-### Performance Enhancements
+```
+/
+├── src/
+│   ├── index.js              # Orchestration, parallelism, background phase
+│   ├── processors/           # imageProcessor, htmlProcessor, progressiveProcessor
+│   └── utils/                # config, hash, paths
+├── test/
+│   ├── index.test.js         # integration against src/
+│   ├── integration/          # realistic-workflow
+│   ├── unit/                 # utils + processors + edge cases
+│   └── fixtures/             # sample images/HTML
+├── docs/
+│   └── THEORY.md             # Architecture + invariants
+└── .github/
+    ├── workflows/            # test.yml, test-matrix.yml, claude-code.yml
+    └── dependabot.yml
+```
 
-- Implement more sophisticated caching (cross-build persistence)
-- Optimize memory usage for large image batches
-- Add support for image optimization workers
+## Tooling
 
-### Feature Additions
+- **Biome** for lint + format (single tool, single config: `biome.json`)
+- **node:test** + `node:assert/strict` for testing; native coverage
+- **Node >= 22** required
 
-- Support for additional formats (WebP2, JPEG XL when available)
-- Configurable placeholder generation strategies
-- Integration with CDN providers
-- Support for art direction with different images per breakpoint
+## When validation flags something
 
-## Troubleshooting
-
-### Common Issues
-
-1. **Images not found**: Ensure assets plugin runs before this plugin
-2. **Memory issues**: Reduce concurrency setting for large images
-3. **Progressive loading not working**: Check browser console for JavaScript errors
-4. **Aspect ratio issues**: Verify placeholder generation includes original dimensions
-5. **SVG files being processed**: This plugin automatically skips SVG files since they are vector graphics that don't need responsive raster variants. If you see SVG processing, check your configuration or image paths.
-
-### Debug Workflow
-
-1. Enable debug logging with `DEBUG=metalsmith-optimize-images*`
-2. Check generated metadata file if `generateMetadata: true`
-3. Verify output directory contains expected image variants
-4. Test responsive behavior in browser dev tools
-
-## Development Notes
-
-### Code Organization
-
-- Each processor handles a specific aspect (image, HTML, progressive)
-- Utilities are pure functions for testability
-- Configuration uses deep merge for nested options
-- All async operations use Promise.all for parallelism
-
-### Testing Approach ✅ **IMPLEMENTED**
-
-- **Unit tests** for utilities and pure functions (100% coverage)
-- **Integration tests** with real Metalsmith instances (96.06% coverage)
-- **Edge case testing** for error conditions and unusual inputs
-- **Mock minimization** - always use real Metalsmith instances when available
-- **Performance validation** for parallel processing scenarios
-
-### Code Quality Standards
-
-- **ESLint compliance** with strict rules
-- **No unused variables** (enforced with \_prefix for intentional unused args)
-- **Comprehensive comments** added to all source files for maintainability
-- **Type safety** through JSDoc annotations
-
-This plugin represents a comprehensive approach to responsive image optimization in static site generation, balancing performance, developer experience, and browser compatibility.
+`validate` returns `failed` (must-fix), `warnings`, and `recommendations`.
+Implement recommendations as written. Note two known-benign warnings here: the
+"should accept (files, metalsmith, done)" note is a false positive for this
+plugin's signature, and "Hardcoded CSS dimensions" refers to the progressive
+placeholder styles.

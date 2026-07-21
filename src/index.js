@@ -32,8 +32,8 @@
  * @property {string} [imageFolder='lib/assets/images'] - Folder to scan for background images, relative to source
  */
 
-import path from 'path';
-import fs from 'fs';
+import path from 'node:path';
+import fs from 'node:fs';
 import * as mkdirp from 'mkdirp';
 import sharp from 'sharp';
 import { buildConfig } from './utils/config.js';
@@ -48,12 +48,12 @@ import { processHtmlFile, generateMetadata } from './processors/htmlProcessor.js
  * @param {string} label - Option name, used in the error message
  * @returns {string} The resolved, validated absolute target path
  */
-function assertWithin( base, target, label ) {
-  const resolvedBase = path.resolve( base );
-  const resolvedTarget = path.resolve( resolvedBase, target );
-  const rel = path.relative( resolvedBase, resolvedTarget );
-  if ( rel === '..' || rel.startsWith( `..${path.sep}` ) || path.isAbsolute( rel ) ) {
-    throw new Error( `Invalid ${label}: "${target}" resolves outside the build directory` );
+function assertWithin(base, target, label) {
+  const resolvedBase = path.resolve(base);
+  const resolvedTarget = path.resolve(resolvedBase, target);
+  const rel = path.relative(resolvedBase, resolvedTarget);
+  if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
+    throw new Error(`Invalid ${label}: "${target}" resolves outside the build directory`);
   }
   return resolvedTarget;
 }
@@ -65,9 +65,9 @@ function assertWithin( base, target, label ) {
  * @param {Options} [options={}] - Configuration options for the plugin
  * @returns {import('metalsmith').Plugin} - Metalsmith plugin function
  */
-function optimizeImagesPlugin( options = {} ) {
+function optimizeImagesPlugin(options = {}) {
   // Build configuration with defaults and user options
-  const config = buildConfig( options );
+  const config = buildConfig(options);
 
   /**
    * The Metalsmith plugin function
@@ -76,13 +76,13 @@ function optimizeImagesPlugin( options = {} ) {
    * @param {Function} done - Callback function
    * @return {void}
    */
-  return async function optimizeImages( files, metalsmith, done ) {
+  return async function optimizeImages(files, metalsmith, done) {
     try {
       const destination = metalsmith.destination();
-      const outputPath = assertWithin( destination, config.outputDir, 'outputDir' );
+      const outputPath = assertWithin(destination, config.outputDir, 'outputDir');
 
       // Set up debug function for logging (uses 'DEBUG=metalsmith-optimize-images*' env var)
-      const debug = metalsmith.debug( 'metalsmith-optimize-images' );
+      const debug = metalsmith.debug('metalsmith-optimize-images');
 
       // Resolve persistent cache directory from config.
       // When set (e.g., 'lib/assets/images/responsive'), variants are read/written there
@@ -90,47 +90,45 @@ function optimizeImagesPlugin( options = {} ) {
       let cacheDir = null;
       let sourcePrefix = null;
 
-      if ( config.cache ) {
+      if (config.cache) {
         // Normalise: cache: true → default path 'lib/<outputDir>'
-        const cachePath = typeof config.cache === 'string'
-          ? config.cache
-          : path.join( 'lib', config.outputDir );
+        const cachePath = typeof config.cache === 'string' ? config.cache : path.join('lib', config.outputDir);
 
-        cacheDir = assertWithin( metalsmith.directory(), cachePath, 'cache' );
-        mkdirp.mkdirpSync( cacheDir );
+        cacheDir = assertWithin(metalsmith.directory(), cachePath, 'cache');
+        mkdirp.mkdirpSync(cacheDir);
 
         // Derive the source-asset prefix so the plugin can find images on disk
         // when it runs before the static-files copy.
         // e.g., cachePath='lib/assets/images/responsive', outputDir='assets/images/responsive'
         //   → sourcePrefix = 'lib/' (the part of cachePath that precedes outputDir)
-        if ( cachePath.endsWith( config.outputDir ) ) {
-          sourcePrefix = cachePath.slice( 0, cachePath.length - config.outputDir.length );
+        if (cachePath.endsWith(config.outputDir)) {
+          sourcePrefix = cachePath.slice(0, cachePath.length - config.outputDir.length);
         }
 
-        debug( `Persistent cache: ${cacheDir}` );
+        debug(`Persistent cache: ${cacheDir}`);
       }
 
       // Ensure the output directory exists where processed images will be saved
-      mkdirp.mkdirpSync( outputPath );
+      mkdirp.mkdirpSync(outputPath);
 
       // Find all HTML files that match the pattern (default: **/*.html)
       // Also ensure they actually end with .html to avoid processing CSS/JS files
-      const htmlFiles = Object.keys( files ).filter( ( file ) => {
+      const htmlFiles = Object.keys(files).filter((file) => {
         // Must match the HTML pattern
-        if ( !metalsmith.match( config.htmlPattern, file ) ) {
+        if (!metalsmith.match(config.htmlPattern, file)) {
           return false;
         }
 
         // Must actually be an HTML file
-        if ( !file.endsWith( '.html' ) ) {
+        if (!file.endsWith('.html')) {
           return false;
         }
 
         return true;
-      } );
+      });
 
-      if ( htmlFiles.length === 0 ) {
-        debug( 'No HTML files found' );
+      if (htmlFiles.length === 0) {
+        debug('No HTML files found');
         return done();
       }
 
@@ -141,43 +139,53 @@ function optimizeImagesPlugin( options = {} ) {
       // Chunk HTML files to respect concurrency limit (default: 5)
       // This prevents overwhelming the system with too many parallel operations
       const chunks = [];
-      for ( let i = 0; i < htmlFiles.length; i += config.concurrency ) {
-        chunks.push( htmlFiles.slice( i, i + config.concurrency ) );
+      for (let i = 0; i < htmlFiles.length; i += config.concurrency) {
+        chunks.push(htmlFiles.slice(i, i + config.concurrency));
       }
 
       // Process all chunks in parallel - each chunk processes its files in parallel
       // This creates a two-level parallelism: chunk-level and file-level within chunks
       await Promise.all(
-        chunks.map( async ( chunk ) => {
+        chunks.map(async (chunk) => {
           // Process files within each chunk in parallel
           await Promise.all(
-            chunk.map( async ( htmlFile ) => {
+            chunk.map(async (htmlFile) => {
               // This function parses HTML, finds images, processes them, and updates the HTML
-              await processHtmlFile( htmlFile, files[htmlFile], files, metalsmith, processedImages, debug, config, cacheDir, sourcePrefix );
-            } )
+              await processHtmlFile(
+                htmlFile,
+                files[htmlFile],
+                files,
+                metalsmith,
+                processedImages,
+                debug,
+                config,
+                cacheDir,
+                sourcePrefix
+              );
+            })
           );
-        } )
+        })
       );
 
       // Process unused images for background image support
       // This finds images that weren't processed during HTML scanning and creates variants
       // for use in CSS background-image with image-set()
-      if ( config.processUnusedImages ) {
-        await processUnusedImages( files, metalsmith, processedImages, debug, config, cacheDir );
+      if (config.processUnusedImages) {
+        await processUnusedImages(files, metalsmith, processedImages, debug, config, cacheDir);
       }
 
       // Optional: Generate a JSON metadata file with information about all processed images
       // Useful for debugging or integration with other tools
-      if ( config.generateMetadata ) {
-        generateMetadata( processedImages, files, config );
+      if (config.generateMetadata) {
+        generateMetadata(processedImages, files, config);
       }
 
-      debug( 'Responsive images processing complete' );
+      debug('Responsive images processing complete');
       done();
-    } catch ( err ) {
+    } catch (err) {
       // Use console.error for errors to ensure they're visible even if debug mode is not enabled
-      console.error( `Error in responsive images plugin: ${err.message}` );
-      done( err );
+      console.error(`Error in responsive images plugin: ${err.message}`);
+      done(err);
     }
   };
 }
@@ -193,61 +201,61 @@ function optimizeImagesPlugin( options = {} ) {
  * @param {Object} config - Plugin configuration
  * @return {Promise<void>} - Promise that resolves when processing is complete
  */
-async function processUnusedImages( files, metalsmith, processedImages, debug, config, cacheDir ) {
-  debug( 'Processing unused images for background image support' );
+async function processUnusedImages(files, metalsmith, processedImages, debug, config, cacheDir) {
+  debug('Processing unused images for background image support');
 
   // Get all image paths that were already processed during HTML scanning
   const processedImagePaths = new Set();
-  processedImages.forEach( ( _variants, cacheKey ) => {
-    const [imagePath] = cacheKey.split( ':' );
-    processedImagePaths.add( imagePath );
-  } );
+  processedImages.forEach((_variants, cacheKey) => {
+    const [imagePath] = cacheKey.split(':');
+    processedImagePaths.add(imagePath);
+  });
 
-  debug( `Processed image paths from HTML: ${Array.from( processedImagePaths ).join( ', ' )}` );
+  debug(`Processed image paths from HTML: ${Array.from(processedImagePaths).join(', ')}`);
 
   // Find images that weren't processed during HTML scanning using hybrid approach
-  const allBackgroundImages = await findUnprocessedImages( files, metalsmith, config, processedImagePaths, debug );
-  debug( `Background images found to process: ${allBackgroundImages.map( ( img ) => img.path ).join( ', ' )}` );
+  const allBackgroundImages = await findUnprocessedImages(files, metalsmith, config, processedImagePaths, debug);
+  debug(`Background images found to process: ${allBackgroundImages.map((img) => img.path).join(', ')}`);
 
-  if ( allBackgroundImages.length === 0 ) {
-    debug( 'No unused images found to process' );
+  if (allBackgroundImages.length === 0) {
+    debug('No unused images found to process');
     return;
   }
 
-  debug( `Found ${allBackgroundImages.length} unused images to process for background use` );
+  debug(`Found ${allBackgroundImages.length} unused images to process for background use`);
 
   // Process background images in parallel for better performance
   await Promise.all(
-    allBackgroundImages.map( async ( imageObj ) => {
+    allBackgroundImages.map(async (imageObj) => {
       try {
-        debug( `Processing background image: ${imageObj.path} (source: ${imageObj.source})` );
+        debug(`Processing background image: ${imageObj.path} (source: ${imageObj.source})`);
 
         // Generate background variants with original size and half size
-        const variants = await processBackgroundImageVariants( imageObj.buffer, imageObj.path, debug, config, cacheDir );
+        const variants = await processBackgroundImageVariants(imageObj.buffer, imageObj.path, debug, config, cacheDir);
 
         // When cache is configured, variant files are written to cacheDir by
         // processBackgroundImageVariants and the static-files plugin copies them.
         // Otherwise, add them to the files object directly.
-        if ( !cacheDir ) {
-          variants.forEach( ( variant ) => {
+        if (!cacheDir) {
+          variants.forEach((variant) => {
             files[variant.path] = {
               contents: variant.buffer
             };
-          } );
+          });
         }
 
         // Cache the variants (using current timestamp as mtime for unused images)
         const cacheKey = `${imageObj.path}:${Date.now()}`;
-        processedImages.set( cacheKey, variants );
+        processedImages.set(cacheKey, variants);
 
-        debug( `Generated ${variants.length} background variants for ${imageObj.path}` );
-      } catch ( err ) {
-        debug( `Error processing background image ${imageObj.path}: ${err.message}` );
+        debug(`Generated ${variants.length} background variants for ${imageObj.path}`);
+      } catch (err) {
+        debug(`Error processing background image ${imageObj.path}: ${err.message}`);
       }
-    } )
+    })
   );
 
-  debug( 'Background image processing complete' );
+  debug('Background image processing complete');
 }
 
 /**
@@ -260,197 +268,197 @@ async function processUnusedImages( files, metalsmith, processedImages, debug, c
  * @param {Function} debug - Debug function
  * @return {Promise<Array>} - Array of unprocessed image objects with {path, buffer}
  */
-async function findUnprocessedImages( files, metalsmith, config, processedImagePaths, debug ) {
+async function findUnprocessedImages(files, metalsmith, config, processedImagePaths, debug) {
   const unprocessedImages = [];
-  const sourceImagesDir = path.join( metalsmith.source(), 'lib/assets/images' );
+  const sourceImagesDir = path.join(metalsmith.source(), 'lib/assets/images');
 
-  debug( `Looking for unprocessed images using hybrid approach` );
+  debug(`Looking for unprocessed images using hybrid approach`);
 
   // Method 1: Scan filesystem (for real testbed scenario)
   try {
-    debug( `Attempting to scan source directory: ${sourceImagesDir}` );
-    debug( `Source directory exists: ${fs.existsSync( sourceImagesDir )}` );
-    debug( `Metalsmith source: ${metalsmith.source()}` );
-    debug( `Metalsmith destination: ${metalsmith.destination()}` );
+    debug(`Attempting to scan source directory: ${sourceImagesDir}`);
+    debug(`Source directory exists: ${fs.existsSync(sourceImagesDir)}`);
+    debug(`Metalsmith source: ${metalsmith.source()}`);
+    debug(`Metalsmith destination: ${metalsmith.destination()}`);
 
-    if ( fs.existsSync( sourceImagesDir ) ) {
-      debug( `Scanning source directory: ${sourceImagesDir}` );
+    if (fs.existsSync(sourceImagesDir)) {
+      debug(`Scanning source directory: ${sourceImagesDir}`);
 
-      const scanDirectory = ( dir, relativePath = '' ) => {
-        const items = fs.readdirSync( dir );
-        debug( `Found ${items.length} items in ${dir}` );
+      const scanDirectory = (dir, relativePath = '') => {
+        const items = fs.readdirSync(dir);
+        debug(`Found ${items.length} items in ${dir}`);
 
-        for ( const item of items ) {
-          if ( item === '.DS_Store' ) {
+        for (const item of items) {
+          if (item === '.DS_Store') {
             continue;
           }
 
-          const fullPath = path.join( dir, item );
-          const itemRelativePath = path.join( relativePath, item );
+          const fullPath = path.join(dir, item);
+          const itemRelativePath = path.join(relativePath, item);
 
-          if ( fs.statSync( fullPath ).isDirectory() ) {
-            debug( `Scanning subdirectory: ${item}` );
-            scanDirectory( fullPath, itemRelativePath );
+          if (fs.statSync(fullPath).isDirectory()) {
+            debug(`Scanning subdirectory: ${item}`);
+            scanDirectory(fullPath, itemRelativePath);
           } else {
             const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif'];
-            if ( imageExtensions.some( ( ext ) => item.toLowerCase().endsWith( ext ) ) ) {
+            if (imageExtensions.some((ext) => item.toLowerCase().endsWith(ext))) {
               // Skip if this is in the responsive output directory
               if (
-                itemRelativePath.startsWith( 'responsive/' ) ||
-                itemRelativePath.includes( '/responsive/' ) ||
-                fullPath.includes( config.outputDir )
+                itemRelativePath.startsWith('responsive/') ||
+                itemRelativePath.includes('/responsive/') ||
+                fullPath.includes(config.outputDir)
               ) {
-                debug( `Skipping responsive variant: ${itemRelativePath}` );
+                debug(`Skipping responsive variant: ${itemRelativePath}`);
                 continue;
               }
 
-              const buildPath = path.join( 'assets/images', itemRelativePath );
-              const normalizedBuildPath = buildPath.replace( /\\/g, '/' );
+              const buildPath = path.join('assets/images', itemRelativePath);
+              const normalizedBuildPath = buildPath.replace(/\\/g, '/');
 
-              debug( `Found filesystem image: ${item} -> ${normalizedBuildPath}` );
-              debug( `Already processed? ${processedImagePaths.has( normalizedBuildPath )}` );
+              debug(`Found filesystem image: ${item} -> ${normalizedBuildPath}`);
+              debug(`Already processed? ${processedImagePaths.has(normalizedBuildPath)}`);
 
-              if ( !processedImagePaths.has( normalizedBuildPath ) ) {
-                debug( `Found unprocessed filesystem image: ${itemRelativePath}` );
-                const imageBuffer = fs.readFileSync( fullPath );
-                unprocessedImages.push( {
+              if (!processedImagePaths.has(normalizedBuildPath)) {
+                debug(`Found unprocessed filesystem image: ${itemRelativePath}`);
+                const imageBuffer = fs.readFileSync(fullPath);
+                unprocessedImages.push({
                   path: itemRelativePath,
                   buffer: imageBuffer,
                   source: 'filesystem'
-                } );
+                });
               }
             }
           }
         }
       };
 
-      scanDirectory( sourceImagesDir );
+      scanDirectory(sourceImagesDir);
     } else {
-      debug( `Source directory does not exist, trying alternative paths...` );
+      debug(`Source directory does not exist, trying alternative paths...`);
 
       // Try alternative paths
       const altPaths = [
-        path.join( metalsmith.source(), 'assets/images' ),
-        path.join( metalsmith.source(), 'images' ),
-        path.join( metalsmith.destination(), 'assets/images' ),
-        path.join( process.cwd(), 'lib/assets/images' ),
-        path.join( process.cwd(), 'src/assets/images' )
+        path.join(metalsmith.source(), 'assets/images'),
+        path.join(metalsmith.source(), 'images'),
+        path.join(metalsmith.destination(), 'assets/images'),
+        path.join(process.cwd(), 'lib/assets/images'),
+        path.join(process.cwd(), 'src/assets/images')
       ];
 
-      for ( const altPath of altPaths ) {
-        debug( `Trying alternative path: ${altPath} - exists: ${fs.existsSync( altPath )}` );
-        if ( fs.existsSync( altPath ) ) {
-          debug( `Found images at alternative path: ${altPath}` );
+      for (const altPath of altPaths) {
+        debug(`Trying alternative path: ${altPath} - exists: ${fs.existsSync(altPath)}`);
+        if (fs.existsSync(altPath)) {
+          debug(`Found images at alternative path: ${altPath}`);
 
           // Scan the found alternative path
-          const scanAlternativeDirectory = ( dir, relativePath = '' ) => {
-            const items = fs.readdirSync( dir );
-            debug( `Found ${items.length} items in alternative path ${dir}` );
+          const scanAlternativeDirectory = (dir, relativePath = '') => {
+            const items = fs.readdirSync(dir);
+            debug(`Found ${items.length} items in alternative path ${dir}`);
 
-            for ( const item of items ) {
-              if ( item === '.DS_Store' ) {
+            for (const item of items) {
+              if (item === '.DS_Store') {
                 continue;
               }
 
-              const fullPath = path.join( dir, item );
-              const itemRelativePath = path.join( relativePath, item );
+              const fullPath = path.join(dir, item);
+              const itemRelativePath = path.join(relativePath, item);
 
-              if ( fs.statSync( fullPath ).isDirectory() ) {
-                debug( `Scanning alternative subdirectory: ${item}` );
-                scanAlternativeDirectory( fullPath, itemRelativePath );
+              if (fs.statSync(fullPath).isDirectory()) {
+                debug(`Scanning alternative subdirectory: ${item}`);
+                scanAlternativeDirectory(fullPath, itemRelativePath);
               } else {
                 const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif'];
-                if ( imageExtensions.some( ( ext ) => item.toLowerCase().endsWith( ext ) ) ) {
+                if (imageExtensions.some((ext) => item.toLowerCase().endsWith(ext))) {
                   // Skip if this is in the responsive output directory
                   if (
-                    itemRelativePath.startsWith( 'responsive/' ) ||
-                    itemRelativePath.includes( '/responsive/' ) ||
-                    fullPath.includes( config.outputDir )
+                    itemRelativePath.startsWith('responsive/') ||
+                    itemRelativePath.includes('/responsive/') ||
+                    fullPath.includes(config.outputDir)
                   ) {
-                    debug( `Skipping responsive variant in alt scan: ${itemRelativePath}` );
+                    debug(`Skipping responsive variant in alt scan: ${itemRelativePath}`);
                     continue;
                   }
 
                   // For build directory, the path structure is already correct
-                  const buildPath = altPath.includes( 'build' )
-                    ? path.join( 'assets/images', itemRelativePath )
-                    : path.join( 'assets/images', itemRelativePath );
-                  const normalizedBuildPath = buildPath.replace( /\\/g, '/' );
+                  const buildPath = altPath.includes('build')
+                    ? path.join('assets/images', itemRelativePath)
+                    : path.join('assets/images', itemRelativePath);
+                  const normalizedBuildPath = buildPath.replace(/\\/g, '/');
 
-                  debug( `Found alternative filesystem image: ${item} -> ${normalizedBuildPath}` );
-                  debug( `Already processed? ${processedImagePaths.has( normalizedBuildPath )}` );
+                  debug(`Found alternative filesystem image: ${item} -> ${normalizedBuildPath}`);
+                  debug(`Already processed? ${processedImagePaths.has(normalizedBuildPath)}`);
 
-                  if ( !processedImagePaths.has( normalizedBuildPath ) ) {
-                    debug( `Found unprocessed alternative filesystem image: ${itemRelativePath}` );
-                    const imageBuffer = fs.readFileSync( fullPath );
-                    unprocessedImages.push( {
+                  if (!processedImagePaths.has(normalizedBuildPath)) {
+                    debug(`Found unprocessed alternative filesystem image: ${itemRelativePath}`);
+                    const imageBuffer = fs.readFileSync(fullPath);
+                    unprocessedImages.push({
                       path: itemRelativePath,
                       buffer: imageBuffer,
                       source: 'filesystem-alt'
-                    } );
+                    });
                   }
                 }
               }
             }
           };
 
-          scanAlternativeDirectory( altPath );
+          scanAlternativeDirectory(altPath);
           break; // Stop after finding and scanning the first valid path
         }
       }
     }
-  } catch ( err ) {
-    debug( `Error scanning filesystem: ${err.message}` );
+  } catch (err) {
+    debug(`Error scanning filesystem: ${err.message}`);
   }
 
   // Method 2: Scan Metalsmith files object (for test scenarios and edge cases)
-  debug( `Scanning Metalsmith files object` );
+  debug(`Scanning Metalsmith files object`);
   const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif'];
 
-  Object.keys( files ).forEach( ( filePath ) => {
+  Object.keys(files).forEach((filePath) => {
     // Skip if not an image
-    if ( !imageExtensions.some( ( ext ) => filePath.toLowerCase().endsWith( ext ) ) ) {
+    if (!imageExtensions.some((ext) => filePath.toLowerCase().endsWith(ext))) {
       return;
     }
 
     // Skip if it's already a responsive variant (comprehensive checks)
     if (
-      filePath.startsWith( `${config.outputDir}/` ) ||
-      filePath.includes( '/responsive/' ) ||
-      filePath.includes( 'responsive-images-manifest.json' ) ||
-      filePath.match( /-\d+w(-[a-f0-9]+)?\.(avif|webp|jpg|jpeg|png)$/i )
+      filePath.startsWith(`${config.outputDir}/`) ||
+      filePath.includes('/responsive/') ||
+      filePath.includes('responsive-images-manifest.json') ||
+      filePath.match(/-\d+w(-[a-f0-9]+)?\.(avif|webp|jpg|jpeg|png)$/i)
     ) {
-      debug( `Skipping responsive variant in files object: ${filePath}` );
+      debug(`Skipping responsive variant in files object: ${filePath}`);
       return;
     }
 
     // Skip if already processed during HTML scanning
-    if ( processedImagePaths.has( filePath ) ) {
-      debug( `Skipping already processed files object image: ${filePath}` );
+    if (processedImagePaths.has(filePath)) {
+      debug(`Skipping already processed files object image: ${filePath}`);
       return;
     }
 
     // Check if we already found this image from filesystem scan
-    const isAlreadyFound = unprocessedImages.some( ( img ) => {
+    const isAlreadyFound = unprocessedImages.some((img) => {
       // For files object images starting with 'images/', check if filesystem found the same file
-      if ( filePath.startsWith( 'images/' ) ) {
-        const relativePath = filePath.replace( 'images/', '' );
+      if (filePath.startsWith('images/')) {
+        const relativePath = filePath.replace('images/', '');
         return img.path === relativePath;
       }
       return false;
-    } );
+    });
 
-    if ( !isAlreadyFound ) {
-      debug( `Found unprocessed files object image: ${filePath}` );
-      unprocessedImages.push( {
+    if (!isAlreadyFound) {
+      debug(`Found unprocessed files object image: ${filePath}`);
+      unprocessedImages.push({
         path: filePath,
         buffer: files[filePath].contents,
         source: 'files'
-      } );
+      });
     }
-  } );
+  });
 
-  debug( `Found ${unprocessedImages.length} unprocessed images total` );
+  debug(`Found ${unprocessedImages.length} unprocessed images total`);
   return unprocessedImages;
 }
 
@@ -464,8 +472,8 @@ async function findUnprocessedImages( files, metalsmith, config, processedImageP
  * @param {string} [cacheDir] - Absolute path to the persistent cache directory, or null
  * @return {Promise<Array<Object>>} - Array of generated variants
  */
-async function processBackgroundImageVariants( buffer, originalPath, debugFn, config, cacheDir ) {
-  const image = sharp( buffer );
+async function processBackgroundImageVariants(buffer, originalPath, debugFn, config, cacheDir) {
+  const image = sharp(buffer);
   const metadata = await image.metadata();
   const variants = [];
 
@@ -473,37 +481,37 @@ async function processBackgroundImageVariants( buffer, originalPath, debugFn, co
   // Background filenames are deterministic (no content hash), so existence alone
   // tells us the work was already done. If a source image changes content without
   // changing filename, delete the responsive directory to force regeneration.
-  if ( cacheDir ) {
-    const cached = await loadCachedBgVariants( originalPath, metadata, config, cacheDir, debugFn );
-    if ( cached ) {
+  if (cacheDir) {
+    const cached = await loadCachedBgVariants(originalPath, metadata, config, cacheDir, debugFn);
+    if (cached) {
       return cached;
     }
   }
 
-  debugFn( `Processing background image ${originalPath}: ${metadata.width}x${metadata.height}` );
+  debugFn(`Processing background image ${originalPath}: ${metadata.width}x${metadata.height}`);
 
   // Create 1x (original size) and 2x (half size) variants
   const sizes = [
     { width: metadata.width, density: '1x' },
-    { width: Math.round( metadata.width / 2 ), density: '2x' }
+    { width: Math.round(metadata.width / 2), density: '2x' }
   ];
 
   // Process both sizes in parallel
-  const sizePromises = sizes.map( async ( size ) => {
+  const sizePromises = sizes.map(async (size) => {
     // Create a Sharp instance for this size
-    const resized = image.clone().resize( {
+    const resized = image.clone().resize({
       width: size.width,
       withoutEnlargement: true // Don't upscale images
-    } );
+    });
 
     // Get actual dimensions after resize
     const resizedMeta = await resized.metadata();
 
     // Process each format in parallel for this size
-    const formatPromises = config.formats.map( async ( format ) => {
+    const formatPromises = config.formats.map(async (format) => {
       try {
         // Skip problematic format combinations
-        if ( format === 'original' && metadata.format.toLowerCase() === 'webp' ) {
+        if (format === 'original' && metadata.format.toLowerCase() === 'webp') {
           return null;
         }
 
@@ -511,7 +519,7 @@ async function processBackgroundImageVariants( buffer, originalPath, debugFn, co
         let outputFormat = format;
         let sharpMethod = format;
 
-        if ( format === 'original' ) {
+        if (format === 'original') {
           outputFormat = metadata.format.toLowerCase();
           sharpMethod = outputFormat === 'jpeg' ? 'jpeg' : outputFormat;
         }
@@ -520,23 +528,23 @@ async function processBackgroundImageVariants( buffer, originalPath, debugFn, co
         let processedImage = resized.clone();
         const formatOptions = config.formatOptions[format === 'original' ? outputFormat : format] || {};
 
-        if ( sharpMethod === 'avif' ) {
-          processedImage = processedImage.avif( formatOptions );
-        } else if ( sharpMethod === 'webp' ) {
-          processedImage = processedImage.webp( formatOptions );
-        } else if ( sharpMethod === 'jpeg' ) {
-          processedImage = processedImage.jpeg( formatOptions );
-        } else if ( sharpMethod === 'png' ) {
-          processedImage = processedImage.png( formatOptions );
+        if (sharpMethod === 'avif') {
+          processedImage = processedImage.avif(formatOptions);
+        } else if (sharpMethod === 'webp') {
+          processedImage = processedImage.webp(formatOptions);
+        } else if (sharpMethod === 'jpeg') {
+          processedImage = processedImage.jpeg(formatOptions);
+        } else if (sharpMethod === 'png') {
+          processedImage = processedImage.png(formatOptions);
         }
 
         // Generate output buffer
         const outputBuffer = await processedImage.toBuffer();
 
         // Generate variant path without hash for easier CSS usage
-        const variantPath = generateBackgroundVariantPath( originalPath, size.width, outputFormat, config );
+        const variantPath = generateBackgroundVariantPath(originalPath, size.width, outputFormat, config);
 
-        debugFn( `Generated background variant: ${variantPath} (${size.density})` );
+        debugFn(`Generated background variant: ${variantPath} (${size.density})`);
 
         return {
           path: variantPath,
@@ -546,34 +554,34 @@ async function processBackgroundImageVariants( buffer, originalPath, debugFn, co
           format: outputFormat,
           density: size.density
         };
-      } catch ( err ) {
-        debugFn( `Error processing ${format} format for ${originalPath}: ${err.message}` );
+      } catch (err) {
+        debugFn(`Error processing ${format} format for ${originalPath}: ${err.message}`);
         return null;
       }
-    } );
+    });
 
-    const formatResults = await Promise.all( formatPromises );
-    return formatResults.filter( ( result ) => result !== null );
-  } );
+    const formatResults = await Promise.all(formatPromises);
+    return formatResults.filter((result) => result !== null);
+  });
 
-  const sizeResults = await Promise.all( sizePromises );
+  const sizeResults = await Promise.all(sizePromises);
 
   // Flatten the results
-  sizeResults.forEach( ( formatVariants ) => {
-    variants.push( ...formatVariants );
-  } );
+  sizeResults.forEach((formatVariants) => {
+    variants.push(...formatVariants);
+  });
 
   // Persist newly generated variants to the cache directory so subsequent
   // builds can skip Sharp entirely for these background images.
-  if ( cacheDir && variants.length > 0 ) {
-    for ( const variant of variants ) {
-      const cachePath = path.join( cacheDir, path.basename( variant.path ) );
-      fs.writeFileSync( cachePath, variant.buffer );
+  if (cacheDir && variants.length > 0) {
+    for (const variant of variants) {
+      const cachePath = path.join(cacheDir, path.basename(variant.path));
+      fs.writeFileSync(cachePath, variant.buffer);
     }
-    debugFn( `Wrote ${variants.length} background variants to cache for ${originalPath}` );
+    debugFn(`Wrote ${variants.length} background variants to cache for ${originalPath}`);
   }
 
-  debugFn( `Generated ${variants.length} background variants for ${originalPath}` );
+  debugFn(`Generated ${variants.length} background variants for ${originalPath}`);
   return variants;
 }
 
@@ -588,56 +596,56 @@ async function processBackgroundImageVariants( buffer, originalPath, debugFn, co
  * @param {Function} debugFn - Debug function
  * @return {Promise<Array<Object>|null>} - Loaded variants or null on cache miss
  */
-async function loadCachedBgVariants( originalPath, sourceMetadata, config, cacheDir, debugFn ) {
+async function loadCachedBgVariants(originalPath, sourceMetadata, config, cacheDir, debugFn) {
   const sizes = [
     { width: sourceMetadata.width, density: '1x' },
-    { width: Math.round( sourceMetadata.width / 2 ), density: '2x' }
+    { width: Math.round(sourceMetadata.width / 2), density: '2x' }
   ];
 
   const expected = [];
 
-  for ( const size of sizes ) {
-    for ( const format of config.formats ) {
-      if ( format === 'original' && sourceMetadata.format.toLowerCase() === 'webp' ) {
+  for (const size of sizes) {
+    for (const format of config.formats) {
+      if (format === 'original' && sourceMetadata.format.toLowerCase() === 'webp') {
         continue;
       }
 
       let outputFormat = format;
-      if ( format === 'original' ) {
+      if (format === 'original') {
         outputFormat = sourceMetadata.format.toLowerCase();
       }
 
-      const variantPath = generateBackgroundVariantPath( originalPath, size.width, outputFormat, config );
-      const fullPath = path.join( cacheDir, path.basename( variantPath ) );
-      expected.push( { variantPath, fullPath, width: size.width, format: outputFormat, density: size.density } );
+      const variantPath = generateBackgroundVariantPath(originalPath, size.width, outputFormat, config);
+      const fullPath = path.join(cacheDir, path.basename(variantPath));
+      expected.push({ variantPath, fullPath, width: size.width, format: outputFormat, density: size.density });
     }
   }
 
   // Quick existence check — bail on first miss
-  for ( const ev of expected ) {
-    if ( !fs.existsSync( ev.fullPath ) ) {
+  for (const ev of expected) {
+    if (!fs.existsSync(ev.fullPath)) {
       return null;
     }
   }
 
   // All variants found on disk, load them
-  debugFn( `Loading ${expected.length} cached background variants for ${originalPath}` );
+  debugFn(`Loading ${expected.length} cached background variants for ${originalPath}`);
 
   // Compute height from the source aspect ratio instead of calling sharp().metadata()
   // on every cached file — avoids spinning up Sharp entirely on cache hits.
   const aspectRatio = sourceMetadata.height / sourceMetadata.width;
 
-  const variants = expected.map( ( ev ) => {
-    const buffer = fs.readFileSync( ev.fullPath );
+  const variants = expected.map((ev) => {
+    const buffer = fs.readFileSync(ev.fullPath);
     return {
       path: ev.variantPath,
       buffer,
       width: ev.width,
-      height: Math.round( ev.width * aspectRatio ),
+      height: Math.round(ev.width * aspectRatio),
       format: ev.format,
       density: ev.density
     };
-  } );
+  });
 
   return variants;
 }
@@ -651,9 +659,9 @@ async function loadCachedBgVariants( originalPath, sourceMetadata, config, cache
  * @param {Object} config - Plugin configuration
  * @return {string} - Generated path without hash
  */
-function generateBackgroundVariantPath( originalPath, width, format, config ) {
-  const parsedPath = path.parse( originalPath );
-  const originalFormat = parsedPath.ext.slice( 1 ).toLowerCase();
+function generateBackgroundVariantPath(originalPath, width, format, config) {
+  const parsedPath = path.parse(originalPath);
+  const originalFormat = parsedPath.ext.slice(1).toLowerCase();
 
   // If format is 'original', use the source format
   const outputFormat = format === 'original' ? originalFormat : format;
@@ -661,18 +669,18 @@ function generateBackgroundVariantPath( originalPath, width, format, config ) {
   // Create background pattern without hash: '[filename]-[width]w.[format]'
   // Results in: 'header1-1000w.webp' instead of 'header1-1000w-abc12345.webp'
   const outputName = config.outputPattern
-    .replace( '[filename]', parsedPath.name )
-    .replace( '[width]', width )
-    .replace( '[format]', outputFormat )
-    .replace( '-[hash]', '' ) // Remove hash placeholder and preceding dash
-    .replace( '[hash]', '' ); // Remove any remaining hash placeholder
+    .replace('[filename]', parsedPath.name)
+    .replace('[width]', width)
+    .replace('[format]', outputFormat)
+    .replace('-[hash]', '') // Remove hash placeholder and preceding dash
+    .replace('[hash]', ''); // Remove any remaining hash placeholder
 
-  return path.join( config.outputDir, outputName );
+  return path.join(config.outputDir, outputName);
 }
 
 // Set function name for better debugging
-Object.defineProperty( optimizeImagesPlugin, 'name', { 
-  value: 'metalsmith-optimize-images' 
-} );
+Object.defineProperty(optimizeImagesPlugin, 'name', {
+  value: 'metalsmith-optimize-images'
+});
 
 export default optimizeImagesPlugin;
