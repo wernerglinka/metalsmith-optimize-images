@@ -7,7 +7,6 @@ Metalsmith plugin for generating responsive images with optimal formats
 [![license: MIT][license-badge]][license-url]
 [![test coverage][coverage-badge]][coverage-url]
 [![ESM/CommonJS][modules-badge]][npm-url]
-[![Known Vulnerabilities](https://snyk.io/test/npm/metalsmith-optimize-images/badge.svg)](https://snyk.io/test/npm/metalsmith-optimize-images)
 
 > This Metalsmith plugin is under active development. The API is stable, but breaking changes may occur before reaching 1.0.0.
 
