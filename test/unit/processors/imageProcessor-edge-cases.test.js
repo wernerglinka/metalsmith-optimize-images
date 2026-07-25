@@ -46,6 +46,7 @@ describe('Image Processor Edge Cases - Coverage Gaps', () => {
       const files = {}; // Empty files object - image not in Metalsmith files
 
       const mockMetalsmith = {
+        source: () => path.join(buildDir, 'nonexistent-src'),
         destination: () => buildDir
       };
 
@@ -84,6 +85,7 @@ describe('Image Processor Edge Cases - Coverage Gaps', () => {
       const files = {};
 
       const mockMetalsmith = {
+        source: () => path.join(buildDir, 'nonexistent-src'),
         destination: () => buildDir
       };
 
@@ -120,6 +122,7 @@ describe('Image Processor Edge Cases - Coverage Gaps', () => {
       const files = {};
 
       const mockMetalsmith = {
+        source: () => '/nonexistent/path/that/should/not/exist/src',
         destination: () => '/nonexistent/path/that/should/not/exist'
       };
 

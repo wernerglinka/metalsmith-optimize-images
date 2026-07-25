@@ -30,9 +30,10 @@ utilities:
 3. **Image processing** (`processors/imageProcessor.js`) runs Sharp to produce
    each width×format variant, honoring `skipLarger`, per-format compression
    options, and the cache.
-4. **Background images**: after HTML-referenced images are done, images in the
-   files object that were never referenced are processed for CSS `image-set()`
-   use (1x/2x, hashless filenames).
+4. **Background images**: after HTML-referenced images are done, images that
+   were never referenced are processed for CSS `image-set()` use (1x/2x,
+   hashless filenames). Discovery scans `imageFolder` under the Metalsmith
+   source directory, then the files object — never the build directory.
 5. **Progressive loading** (`processors/progressiveProcessor.js`) optionally
    emits a low-quality placeholder plus injected client JS/CSS that swaps in the
    full image on intersection.
@@ -54,14 +55,30 @@ by `concurrency` so large sites don't exhaust memory or file handles.
   With the cache off, it runs *after* assets are copied because it needs images
   in the files object. This positional difference is the main integration
   subtlety and is spelled out in the README.
-- **`sourcePrefix` bridges disk and build paths.** When running before the copy,
-  source images aren't in the files object yet, so the plugin derives a prefix
-  from the cache path to read them from disk and map HTML references correctly.
+- **Image resolution is a fixed four-step lookup** (`utils/resolve.js`): the
+  Metalsmith files object, then the Metalsmith source directory on disk, then
+  the legacy `sourcePrefix` mapping, then the build directory. The source-
+  directory step is what makes `metalsmith.statik()` sites work — their images
+  are copied outside the file tree at build finalization, so at plugin time
+  they exist only under `metalsmith.source()`. Checking source() *before* the
+  build directory keeps builds deterministic: leftovers from a previous build
+  can never change the outcome. When any lookups fail, the plugin warns on
+  stdout with the missed paths rather than only logging at debug level.
+- **`sourcePrefix` bridges disk and build paths (legacy layouts).** When assets
+  live next to, not inside, the source directory (e.g. `lib/assets` with
+  `metalsmith-static-files`), the plugin derives a prefix from the cache path to
+  read them from disk and map HTML references correctly. Layouts whose images
+  live under `metalsmith.source()` never need it — the source-directory lookup
+  covers them.
 - **Skip what doesn't benefit.** SVGs (vector), external/data URLs, and elements
   opting out via `data-no-responsive` are left untouched.
 
 ## Invariants and failure modes
 
+- **Output never depends on the previous build.** A clean build and a build
+  over a populated destination must emit identical markup and variants. This
+  is why image resolution consults the source directory before the build
+  directory, and why background-image discovery never scans the destination.
 - **No recursive reprocessing.** Generated responsive variants must never be
   treated as source images; background-image discovery filters them out, so
   filenames like `image-320w-640w.jpg` cannot occur.

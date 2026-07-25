@@ -85,6 +85,7 @@ export function buildConfig(options = {}) {
     // Background image processing settings
     processUnusedImages: true, // Process images not found in HTML for background use
     imagePattern: '**/*.{jpg,jpeg,png,gif,webp,avif}', // Pattern to find images for background processing
+    imageFolder: 'lib/assets/images', // Folder to scan for background images, relative to metalsmith.source()
 
     // Persistent cache directory for generated variants (relative to metalsmith.directory())
     // false = disabled, true = default path ('lib/<outputDir>'), string = custom path

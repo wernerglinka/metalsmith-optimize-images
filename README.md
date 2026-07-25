@@ -34,7 +34,20 @@ This package is **ESM-only** and requires Node >= 22. CommonJS projects on Node 
 
 ## Usage
 
-When the persistent cache is enabled the plugin should run **before** the static-files copy so that newly generated variants land in the cache directory and get picked up by the copy step. When the cache is disabled the plugin should run **after** assets are copied, since it needs the images to already be in the Metalsmith files object.
+When the persistent cache is enabled the plugin should run **before** the static-files copy so that newly generated variants land in the cache directory and get picked up by the copy step. When the cache is disabled and assets are copied by a pipeline plugin like `metalsmith-static-files`, the plugin should run **after** the copy. Sites whose images live under the Metalsmith source directory — including Metalsmith 2.7's `statik()` — need no ordering care: the plugin finds those images on disk itself.
+
+### With metalsmith.statik() (Metalsmith 2.7+)
+
+Images under `src/assets/` that are copied at build finalization by `metalsmith.statik(['assets'])` are resolved directly from the source directory. Generated variants are added to the build automatically:
+
+```javascript
+metalsmith.statik(['assets']).use(
+  optimizeImages({
+    widths: [320, 640, 960, 1280, 1920],
+    formats: ['avif', 'webp', 'original']
+  })
+);
+```
 
 ### With persistent cache (recommended)
 
@@ -116,7 +129,16 @@ Source images on disk (lib/assets/images/)
 
 ### Source image discovery
 
-When the plugin runs before the static-files copy, source images are not yet in the Metalsmith files object. The plugin derives a `sourcePrefix` from the cache path to locate them on disk. For example, if `cache` resolves to `lib/assets/images/responsive` and `outputDir` is `assets/images/responsive`, the prefix is `lib/`. An HTML reference to `assets/images/hero.jpg` maps to `lib/assets/images/hero.jpg` on disk.
+Each `<img src>` reference is resolved through a fixed lookup order; the first hit wins:
+
+1. **The Metalsmith files object** — the image is part of the file tree.
+2. **The Metalsmith source directory** — the image lives under `metalsmith.source()` but is excluded from the file tree, as with Metalsmith 2.7's `statik(['assets'])`, which copies assets to the build only at finalization. An HTML reference to `/assets/images/hero.jpg` maps to `src/assets/images/hero.jpg` on disk.
+3. **`sourcePrefix`** — for legacy layouts whose assets live *next to* the source directory (e.g. `lib/assets` with `metalsmith-static-files`). The prefix is derived from the cache path: if `cache` resolves to `lib/assets/images/responsive` and `outputDir` is `assets/images/responsive`, the prefix is `lib/`, and `assets/images/hero.jpg` maps to `lib/assets/images/hero.jpg`.
+4. **The build directory** — a static-copy plugin already ran earlier in the pipeline.
+
+The source directory is checked before the build directory on purpose: whatever a previous build left in `build/` can never change the output, so clean and incremental builds emit identical markup.
+
+If any references cannot be resolved, the plugin prints a warning to stdout listing the missed paths — a build where every lookup fails is not a normal build.
 
 ### Cache invalidation
 
@@ -132,7 +154,7 @@ The cache directory (e.g., `lib/assets/images/responsive/`) should be committed 
 
 | Option                | Type               | Default                               | Description                                                                    |
 | --------------------- | ------------------ | ------------------------------------- | ------------------------------------------------------------------------------ |
-| `cache`               | `boolean\|string`  | `false`                               | Persistent cache. `true` uses `lib/<outputDir>`, string sets a custom path     |
+| `cache`               | `boolean\|string`  | `false`                               | Persistent cache. `true` uses `lib/<outputDir>` (assumes a `lib/` layout — pass a string path otherwise), string sets a custom path |
 | `widths`              | `number[]`         | `[320, 640, 960, 1280, 1920]`         | Image sizes to generate                                                        |
 | `formats`             | `string[]`         | `['avif', 'webp', 'original']`        | Image formats in order of preference                                           |
 | `formatOptions`       | `object`           | See below                             | Format-specific compression settings                                           |
@@ -149,6 +171,8 @@ The cache directory (e.g., `lib/assets/images/responsive/`) should be committed 
 | `isProgressive`       | `boolean`          | `false`                               | Enable progressive image loading                                               |
 | `placeholder`         | `object`           | See below                             | Placeholder image settings                                                     |
 | `processUnusedImages` | `boolean`          | `true`                                | Process unused images for background use                                       |
+| `imageFolder`         | `string`           | `lib/assets/images`                   | Folder scanned for background images, relative to `metalsmith.source()`        |
+| `imagePattern`        | `string`           | `**/*.{jpg,jpeg,png,gif,webp,avif}`   | Glob pattern for images considered in background processing                    |
 
 ### Default Format Options
 
@@ -527,7 +551,7 @@ metalsmith.env('DEBUG', 'metalsmith-optimize-images*');
 
 ## Test Coverage
 
-88 tests covering all major functionality including unit tests for utilities, integration tests with real Metalsmith instances, cache persistence tests, and edge case coverage.
+93 tests covering all major functionality including unit tests for utilities, integration tests with real Metalsmith instances, cache persistence tests, build-determinism regression tests, and edge case coverage.
 
 ## License
 

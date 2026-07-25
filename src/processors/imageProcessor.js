@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { generateHash } from '../utils/hash.js';
 import { generateVariantPath } from '../utils/paths.js';
+import { resolveImage } from '../utils/resolve.js';
 
 /**
  * Process an image into multiple responsive variants and formats
@@ -50,9 +51,6 @@ export async function processImageToVariants(buffer, originalPath, debugFn, conf
       withoutEnlargement: config.skipLarger // Prevents upscaling small images
     });
 
-    // Get actual dimensions after resize (may be smaller than requested width)
-    const resizedMeta = await resized.metadata();
-
     // Process each format in parallel for this width
     const formatPromises = config.formats.map(async (format) => {
       try {
@@ -86,8 +84,11 @@ export async function processImageToVariants(buffer, originalPath, debugFn, conf
           }
         }
 
-        // Generate the actual image buffer - this is where compression happens
-        const formatBuffer = await formatted.toBuffer();
+        // Generate the actual image buffer - this is where compression happens.
+        // resolveWithObject returns the real output dimensions; calling
+        // .metadata() on the pipeline would report the *input* image instead,
+        // which shipped source-height/variant-width mismatches on cold builds.
+        const { data: formatBuffer, info } = await formatted.toBuffer({ resolveWithObject: true });
 
         return {
           path: outputPath,
@@ -96,7 +97,7 @@ export async function processImageToVariants(buffer, originalPath, debugFn, conf
           format: format === 'original' ? metadata.format.toLowerCase() : format,
           originalFormat: metadata.format.toLowerCase(),
           size: formatBuffer.length,
-          height: resizedMeta.height
+          height: info.height
         };
       } catch (err) {
         debugFn(`Error generating ${format} variant for ${originalPath} at width ${width}: ${err.message}`);
@@ -198,6 +199,7 @@ async function loadCachedVariants(originalPath, hash, targetWidths, config, cach
  * @param {Function} context.replacePictureElement - Function to replace img with picture
  * @param {string|null} context.cacheDir - Resolved absolute path to persistent cache, or null
  * @param {string|null} context.sourcePrefix - Prefix to map build paths to source asset paths on disk, or null
+ * @param {Object} [context.stats] - Resolution tracker: { resolved: Set, missed: Set }
  * @return {Promise<void>} - Promise that resolves when the image is processed
  */
 export async function processImage({
@@ -210,7 +212,8 @@ export async function processImage({
   config,
   replacePictureElement,
   cacheDir,
-  sourcePrefix
+  sourcePrefix,
+  stats
 }) {
   const $img = $(img);
   const src = $img.attr('src');
@@ -230,57 +233,9 @@ export async function processImage({
   // Remove leading slash if present (HTML paths vs Metalsmith file keys)
   const normalizedSrc = src.startsWith('/') ? src.slice(1) : src;
 
-  // Image not in Metalsmith files object — try alternative locations on disk
-  if (!files[normalizedSrc]) {
-    let loaded = false;
-
-    // When cache is configured and the plugin runs before the static-files copy,
-    // source images live on disk at sourcePrefix + normalizedSrc
-    if (sourcePrefix && !loaded) {
-      try {
-        const sourcePath = path.resolve(metalsmith.directory(), sourcePrefix, normalizedSrc);
-        if (fs.existsSync(sourcePath)) {
-          files[normalizedSrc] = {
-            contents: fs.readFileSync(sourcePath),
-            mtime: fs.statSync(sourcePath).mtimeMs
-          };
-          loaded = true;
-        }
-      } catch (err) {
-        debug(`Error loading source image from ${sourcePrefix}: ${err.message}`);
-      }
-    }
-
-    // Fallback: try the build directory (handles post-static-copy scenario)
-    if (!loaded) {
-      try {
-        const destination = metalsmith.destination();
-        const imagePath = path.join(destination, normalizedSrc);
-
-        // Security: Ensure resolved path stays within destination directory
-        const resolvedPath = path.resolve(imagePath);
-        const resolvedDestination = path.resolve(destination);
-        if (!resolvedPath.startsWith(resolvedDestination + path.sep)) {
-          debug(`Skipping path traversal attempt: ${normalizedSrc}`);
-          return;
-        }
-
-        if (fs.existsSync(imagePath)) {
-          files[normalizedSrc] = {
-            contents: fs.readFileSync(imagePath),
-            mtime: fs.statSync(imagePath).mtimeMs
-          };
-          loaded = true;
-        }
-      } catch (err) {
-        debug(`Error loading image from build directory: ${err.message}`);
-      }
-    }
-
-    if (!loaded) {
-      debug(`Image not found: ${normalizedSrc}`);
-      return;
-    }
+  // Locate the image: files object → source directory → sourcePrefix → build directory
+  if (!resolveImage(normalizedSrc, files, metalsmith, sourcePrefix, debug, stats)) {
+    return;
   }
 
   // Create a cache key that includes the file path and modification time

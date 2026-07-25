@@ -94,6 +94,16 @@ function optimizeImagesPlugin(options = {}) {
         // Normalise: cache: true → default path 'lib/<outputDir>'
         const cachePath = typeof config.cache === 'string' ? config.cache : path.join('lib', config.outputDir);
 
+        // The boolean form assumes a lib/-based layout. Creating lib/ in a
+        // project that has none (e.g. images under src/assets) is almost
+        // certainly wrong — say so instead of silently making the directory.
+        if (typeof config.cache !== 'string' && !fs.existsSync(path.join(metalsmith.directory(), 'lib'))) {
+          console.warn(
+            `metalsmith-optimize-images: cache: true defaults to "${cachePath}" but this project has no lib/ directory. ` +
+              `Pass an explicit path instead, e.g. cache: 'src/${config.outputDir}'.`
+          );
+        }
+
         cacheDir = assertWithin(metalsmith.directory(), cachePath, 'cache');
         mkdirp.mkdirpSync(cacheDir);
 
@@ -136,6 +146,10 @@ function optimizeImagesPlugin(options = {}) {
       // Key: "filepath:mtime", Value: array of processed image variants
       const processedImages = new Map();
 
+      // Track image resolution across the whole build so a run where lookups
+      // fail is reported loudly instead of only at debug level
+      const stats = { resolved: new Set(), missed: new Set() };
+
       // Chunk HTML files to respect concurrency limit (default: 5)
       // This prevents overwhelming the system with too many parallel operations
       const chunks = [];
@@ -160,12 +174,28 @@ function optimizeImagesPlugin(options = {}) {
                 debug,
                 config,
                 cacheDir,
-                sourcePrefix
+                sourcePrefix,
+                stats
               );
             })
           );
         })
       );
+
+      // A build where image lookups failed ships untouched markup. Make that
+      // visible on stdout instead of leaving it buried at debug level.
+      if (stats.missed.size > 0) {
+        const missedList = [...stats.missed].slice(0, 5).join(', ');
+        const suffix = stats.missed.size > 5 ? ', …' : '';
+        const totalFailure =
+          stats.resolved.size === 0
+            ? ' Every lookup failed — check where your images live relative to the Metalsmith source directory.'
+            : '';
+        console.warn(
+          `metalsmith-optimize-images: ${stats.missed.size} image path(s) referenced in HTML could not be resolved ` +
+            `and were left untouched: ${missedList}${suffix}.${totalFailure}`
+        );
+      }
 
       // Process unused images for background image support
       // This finds images that weren't processed during HTML scanning and creates variants
@@ -259,8 +289,93 @@ async function processUnusedImages(files, metalsmith, processedImages, debug, co
 }
 
 /**
- * Find images that weren't processed during HTML scanning
- * Uses a hybrid approach: scans filesystem first, then falls back to Metalsmith files object
+ * Check whether a files-object path is a generated responsive variant
+ * (or the metadata manifest) rather than a source image
+ * @param {string} filePath - Files-object key
+ * @param {Object} config - Plugin configuration
+ * @return {boolean} - True when the path should be excluded from background processing
+ */
+function isResponsiveVariant(filePath, config) {
+  return (
+    filePath.startsWith(`${config.outputDir}/`) ||
+    filePath.includes('/responsive/') ||
+    filePath.includes('responsive-images-manifest.json') ||
+    /-\d+w(-[a-f0-9]+)?\.(avif|webp|jpg|jpeg|png)$/i.test(filePath)
+  );
+}
+
+/**
+ * Recursively scan an image folder on disk for unprocessed source images
+ * @param {string} dir - Absolute directory to scan
+ * @param {string} relativePath - Path of dir relative to the scan root
+ * @param {Object} ctx - Shared scan context
+ * @param {Object} ctx.metalsmith - Metalsmith instance
+ * @param {Object} ctx.config - Plugin configuration
+ * @param {Set} ctx.processedImagePaths - Build paths already processed from HTML
+ * @param {Array} ctx.unprocessedImages - Accumulator for found images
+ * @param {Set} ctx.seen - Paths already claimed by the filesystem scan
+ * @param {Function} ctx.debug - Debug function
+ * @return {void}
+ */
+function scanImageFolder(dir, relativePath, ctx) {
+  const { metalsmith, config, processedImagePaths, unprocessedImages, seen, debug } = ctx;
+
+  for (const item of fs.readdirSync(dir)) {
+    if (item === '.DS_Store') {
+      continue;
+    }
+
+    const fullPath = path.join(dir, item);
+    const itemRelativePath = path.join(relativePath, item);
+
+    if (fs.statSync(fullPath).isDirectory()) {
+      scanImageFolder(fullPath, itemRelativePath, ctx);
+      continue;
+    }
+
+    const relPosix = itemRelativePath.replace(/\\/g, '/');
+
+    // Only files matching the configured image pattern
+    if (metalsmith.match(config.imagePattern, [relPosix]).length === 0) {
+      continue;
+    }
+
+    // Skip previously generated variants living inside the scanned folder
+    if (
+      relPosix.startsWith('responsive/') ||
+      relPosix.includes('/responsive/') ||
+      fullPath.includes(config.outputDir)
+    ) {
+      debug(`Skipping responsive variant: ${relPosix}`);
+      continue;
+    }
+
+    // Map the on-disk location to its build path to compare against images
+    // already processed from HTML (static copies land under assets/images)
+    const buildPath = path.join('assets/images', itemRelativePath).replace(/\\/g, '/');
+    if (processedImagePaths.has(buildPath)) {
+      debug(`Skipping already processed image: ${buildPath}`);
+      continue;
+    }
+
+    // Remember both spellings so the files-object pass doesn't re-add it
+    seen.add(buildPath);
+    seen.add(path.join(config.imageFolder, itemRelativePath).replace(/\\/g, '/'));
+
+    debug(`Found unprocessed filesystem image: ${relPosix}`);
+    unprocessedImages.push({
+      path: itemRelativePath,
+      buffer: fs.readFileSync(fullPath),
+      source: 'filesystem'
+    });
+  }
+}
+
+/**
+ * Find images that weren't processed during HTML scanning.
+ * Scans config.imageFolder under the Metalsmith source directory, then the
+ * Metalsmith files object. Never scans the build directory: what a previous
+ * build left in build/ must not change this build's output.
  * @param {Object} files - Metalsmith files object
  * @param {Object} metalsmith - Metalsmith instance
  * @param {Object} config - Plugin configuration
@@ -270,193 +385,45 @@ async function processUnusedImages(files, metalsmith, processedImages, debug, co
  */
 async function findUnprocessedImages(files, metalsmith, config, processedImagePaths, debug) {
   const unprocessedImages = [];
-  const sourceImagesDir = path.join(metalsmith.source(), 'lib/assets/images');
+  const seen = new Set();
 
-  debug(`Looking for unprocessed images using hybrid approach`);
-
-  // Method 1: Scan filesystem (for real testbed scenario)
+  // Method 1: scan the configured image folder under the source directory
+  // (covers assets copied outside the file tree by statik/static-files)
+  const imageDir = path.join(metalsmith.source(), config.imageFolder);
   try {
-    debug(`Attempting to scan source directory: ${sourceImagesDir}`);
-    debug(`Source directory exists: ${fs.existsSync(sourceImagesDir)}`);
-    debug(`Metalsmith source: ${metalsmith.source()}`);
-    debug(`Metalsmith destination: ${metalsmith.destination()}`);
-
-    if (fs.existsSync(sourceImagesDir)) {
-      debug(`Scanning source directory: ${sourceImagesDir}`);
-
-      const scanDirectory = (dir, relativePath = '') => {
-        const items = fs.readdirSync(dir);
-        debug(`Found ${items.length} items in ${dir}`);
-
-        for (const item of items) {
-          if (item === '.DS_Store') {
-            continue;
-          }
-
-          const fullPath = path.join(dir, item);
-          const itemRelativePath = path.join(relativePath, item);
-
-          if (fs.statSync(fullPath).isDirectory()) {
-            debug(`Scanning subdirectory: ${item}`);
-            scanDirectory(fullPath, itemRelativePath);
-          } else {
-            const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif'];
-            if (imageExtensions.some((ext) => item.toLowerCase().endsWith(ext))) {
-              // Skip if this is in the responsive output directory
-              if (
-                itemRelativePath.startsWith('responsive/') ||
-                itemRelativePath.includes('/responsive/') ||
-                fullPath.includes(config.outputDir)
-              ) {
-                debug(`Skipping responsive variant: ${itemRelativePath}`);
-                continue;
-              }
-
-              const buildPath = path.join('assets/images', itemRelativePath);
-              const normalizedBuildPath = buildPath.replace(/\\/g, '/');
-
-              debug(`Found filesystem image: ${item} -> ${normalizedBuildPath}`);
-              debug(`Already processed? ${processedImagePaths.has(normalizedBuildPath)}`);
-
-              if (!processedImagePaths.has(normalizedBuildPath)) {
-                debug(`Found unprocessed filesystem image: ${itemRelativePath}`);
-                const imageBuffer = fs.readFileSync(fullPath);
-                unprocessedImages.push({
-                  path: itemRelativePath,
-                  buffer: imageBuffer,
-                  source: 'filesystem'
-                });
-              }
-            }
-          }
-        }
-      };
-
-      scanDirectory(sourceImagesDir);
+    if (fs.existsSync(imageDir)) {
+      debug(`Scanning image folder: ${imageDir}`);
+      scanImageFolder(imageDir, '', { metalsmith, config, processedImagePaths, unprocessedImages, seen, debug });
     } else {
-      debug(`Source directory does not exist, trying alternative paths...`);
-
-      // Try alternative paths
-      const altPaths = [
-        path.join(metalsmith.source(), 'assets/images'),
-        path.join(metalsmith.source(), 'images'),
-        path.join(metalsmith.destination(), 'assets/images'),
-        path.join(process.cwd(), 'lib/assets/images'),
-        path.join(process.cwd(), 'src/assets/images')
-      ];
-
-      for (const altPath of altPaths) {
-        debug(`Trying alternative path: ${altPath} - exists: ${fs.existsSync(altPath)}`);
-        if (fs.existsSync(altPath)) {
-          debug(`Found images at alternative path: ${altPath}`);
-
-          // Scan the found alternative path
-          const scanAlternativeDirectory = (dir, relativePath = '') => {
-            const items = fs.readdirSync(dir);
-            debug(`Found ${items.length} items in alternative path ${dir}`);
-
-            for (const item of items) {
-              if (item === '.DS_Store') {
-                continue;
-              }
-
-              const fullPath = path.join(dir, item);
-              const itemRelativePath = path.join(relativePath, item);
-
-              if (fs.statSync(fullPath).isDirectory()) {
-                debug(`Scanning alternative subdirectory: ${item}`);
-                scanAlternativeDirectory(fullPath, itemRelativePath);
-              } else {
-                const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif'];
-                if (imageExtensions.some((ext) => item.toLowerCase().endsWith(ext))) {
-                  // Skip if this is in the responsive output directory
-                  if (
-                    itemRelativePath.startsWith('responsive/') ||
-                    itemRelativePath.includes('/responsive/') ||
-                    fullPath.includes(config.outputDir)
-                  ) {
-                    debug(`Skipping responsive variant in alt scan: ${itemRelativePath}`);
-                    continue;
-                  }
-
-                  // For build directory, the path structure is already correct
-                  const buildPath = altPath.includes('build')
-                    ? path.join('assets/images', itemRelativePath)
-                    : path.join('assets/images', itemRelativePath);
-                  const normalizedBuildPath = buildPath.replace(/\\/g, '/');
-
-                  debug(`Found alternative filesystem image: ${item} -> ${normalizedBuildPath}`);
-                  debug(`Already processed? ${processedImagePaths.has(normalizedBuildPath)}`);
-
-                  if (!processedImagePaths.has(normalizedBuildPath)) {
-                    debug(`Found unprocessed alternative filesystem image: ${itemRelativePath}`);
-                    const imageBuffer = fs.readFileSync(fullPath);
-                    unprocessedImages.push({
-                      path: itemRelativePath,
-                      buffer: imageBuffer,
-                      source: 'filesystem-alt'
-                    });
-                  }
-                }
-              }
-            }
-          };
-
-          scanAlternativeDirectory(altPath);
-          break; // Stop after finding and scanning the first valid path
-        }
-      }
+      debug(`Image folder does not exist, skipping filesystem scan: ${imageDir}`);
     }
   } catch (err) {
-    debug(`Error scanning filesystem: ${err.message}`);
+    debug(`Error scanning image folder: ${err.message}`);
   }
 
-  // Method 2: Scan Metalsmith files object (for test scenarios and edge cases)
-  debug(`Scanning Metalsmith files object`);
-  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif'];
-
-  Object.keys(files).forEach((filePath) => {
-    // Skip if not an image
-    if (!imageExtensions.some((ext) => filePath.toLowerCase().endsWith(ext))) {
-      return;
-    }
-
-    // Skip if it's already a responsive variant (comprehensive checks)
-    if (
-      filePath.startsWith(`${config.outputDir}/`) ||
-      filePath.includes('/responsive/') ||
-      filePath.includes('responsive-images-manifest.json') ||
-      filePath.match(/-\d+w(-[a-f0-9]+)?\.(avif|webp|jpg|jpeg|png)$/i)
-    ) {
+  // Method 2: images already in the Metalsmith files object
+  for (const filePath of metalsmith.match(config.imagePattern, Object.keys(files))) {
+    if (isResponsiveVariant(filePath, config)) {
       debug(`Skipping responsive variant in files object: ${filePath}`);
-      return;
+      continue;
     }
 
-    // Skip if already processed during HTML scanning
     if (processedImagePaths.has(filePath)) {
       debug(`Skipping already processed files object image: ${filePath}`);
-      return;
+      continue;
     }
 
-    // Check if we already found this image from filesystem scan
-    const isAlreadyFound = unprocessedImages.some((img) => {
-      // For files object images starting with 'images/', check if filesystem found the same file
-      if (filePath.startsWith('images/')) {
-        const relativePath = filePath.replace('images/', '');
-        return img.path === relativePath;
-      }
-      return false;
+    if (seen.has(filePath)) {
+      continue;
+    }
+
+    debug(`Found unprocessed files object image: ${filePath}`);
+    unprocessedImages.push({
+      path: filePath,
+      buffer: files[filePath].contents,
+      source: 'files'
     });
-
-    if (!isAlreadyFound) {
-      debug(`Found unprocessed files object image: ${filePath}`);
-      unprocessedImages.push({
-        path: filePath,
-        buffer: files[filePath].contents,
-        source: 'files'
-      });
-    }
-  });
+  }
 
   debug(`Found ${unprocessedImages.length} unprocessed images total`);
   return unprocessedImages;
@@ -504,9 +471,6 @@ async function processBackgroundImageVariants(buffer, originalPath, debugFn, con
       withoutEnlargement: true // Don't upscale images
     });
 
-    // Get actual dimensions after resize
-    const resizedMeta = await resized.metadata();
-
     // Process each format in parallel for this size
     const formatPromises = config.formats.map(async (format) => {
       try {
@@ -538,8 +502,9 @@ async function processBackgroundImageVariants(buffer, originalPath, debugFn, con
           processedImage = processedImage.png(formatOptions);
         }
 
-        // Generate output buffer
-        const outputBuffer = await processedImage.toBuffer();
+        // Generate output buffer. resolveWithObject returns the real output
+        // dimensions; .metadata() on the pipeline would report the input image.
+        const { data: outputBuffer, info } = await processedImage.toBuffer({ resolveWithObject: true });
 
         // Generate variant path without hash for easier CSS usage
         const variantPath = generateBackgroundVariantPath(originalPath, size.width, outputFormat, config);
@@ -549,8 +514,8 @@ async function processBackgroundImageVariants(buffer, originalPath, debugFn, con
         return {
           path: variantPath,
           buffer: outputBuffer,
-          width: resizedMeta.width,
-          height: resizedMeta.height,
+          width: info.width,
+          height: info.height,
           format: outputFormat,
           density: size.density
         };

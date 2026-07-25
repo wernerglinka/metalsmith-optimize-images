@@ -4,8 +4,8 @@
  */
 import * as cheerio from 'cheerio';
 import path from 'node:path';
-import fs from 'node:fs';
 import { processImage, processImageToVariants } from './imageProcessor.js';
+import { resolveImage } from '../utils/resolve.js';
 import {
   generatePlaceholder,
   createProgressiveWrapper,
@@ -131,6 +131,7 @@ export function replacePictureElement($, $img, variants, config) {
  * @param {Object} config - Plugin configuration
  * @param {string|null} cacheDir - Resolved absolute path to persistent cache, or null
  * @param {string|null} sourcePrefix - Prefix to map build paths to source asset paths on disk, or null
+ * @param {Object} [stats] - Resolution tracker: { resolved: Set, missed: Set }
  * @return {Promise<void>} - Promise that resolves when the HTML file is processed
  */
 export async function processHtmlFile(
@@ -142,7 +143,8 @@ export async function processHtmlFile(
   debug,
   config,
   cacheDir,
-  sourcePrefix
+  sourcePrefix,
+  stats
 ) {
   debug(`Processing HTML file: ${htmlFile}`);
 
@@ -188,7 +190,8 @@ export async function processHtmlFile(
                 debug,
                 config,
                 cacheDir,
-                sourcePrefix
+                sourcePrefix,
+                stats
               })
             : processImage({
                 $,
@@ -200,7 +203,8 @@ export async function processHtmlFile(
                 config,
                 replacePictureElement,
                 cacheDir,
-                sourcePrefix
+                sourcePrefix,
+                stats
               })
         )
       );
@@ -263,7 +267,8 @@ async function processProgressiveImage({
   debug,
   config,
   cacheDir,
-  sourcePrefix
+  sourcePrefix,
+  stats
 }) {
   const $img = $(img);
   const src = $img.attr('src');
@@ -284,57 +289,9 @@ async function processProgressiveImage({
   // Normalize src path to match Metalsmith files object keys
   const normalizedSrc = src.startsWith('/') ? src.slice(1) : src;
 
-  // Image not in Metalsmith files object — try alternative locations on disk
-  if (!files[normalizedSrc]) {
-    let loaded = false;
-
-    // When cache is configured and the plugin runs before the static-files copy,
-    // source images live on disk at sourcePrefix + normalizedSrc
-    if (sourcePrefix && !loaded) {
-      try {
-        const sourcePath = path.resolve(metalsmith.directory(), sourcePrefix, normalizedSrc);
-        if (fs.existsSync(sourcePath)) {
-          files[normalizedSrc] = {
-            contents: fs.readFileSync(sourcePath),
-            mtime: fs.statSync(sourcePath).mtimeMs
-          };
-          loaded = true;
-        }
-      } catch (err) {
-        debug(`Error loading source image from ${sourcePrefix}: ${err.message}`);
-      }
-    }
-
-    // Fallback: try the build directory (handles post-static-copy scenario)
-    if (!loaded) {
-      try {
-        const destination = metalsmith.destination();
-        const imagePath = path.join(destination, normalizedSrc);
-
-        // Security: Ensure resolved path stays within destination directory
-        const resolvedPath = path.resolve(imagePath);
-        const resolvedDestination = path.resolve(destination);
-        if (!resolvedPath.startsWith(resolvedDestination + path.sep)) {
-          debug(`Skipping path traversal attempt: ${normalizedSrc}`);
-          return;
-        }
-
-        if (fs.existsSync(imagePath)) {
-          files[normalizedSrc] = {
-            contents: fs.readFileSync(imagePath),
-            mtime: fs.statSync(imagePath).mtimeMs
-          };
-          loaded = true;
-        }
-      } catch (err) {
-        debug(`Error loading image from build directory: ${err.message}`);
-      }
-    }
-
-    if (!loaded) {
-      debug(`Image not found: ${normalizedSrc}`);
-      return;
-    }
+  // Locate the image: files object → source directory → sourcePrefix → build directory
+  if (!resolveImage(normalizedSrc, files, metalsmith, sourcePrefix, debug, stats)) {
+    return;
   }
 
   // Create a cache key
