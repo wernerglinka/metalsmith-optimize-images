@@ -105,11 +105,37 @@ Not prescriptive; whoever picks this up should decide.
    normal run. A warning on stdout when the miss rate is total would have made
    this visible immediately instead of after a build-output diff.
 
+## Second, smaller bug: wrong intrinsic height on a cold cache
+
+Found while verifying the fix below. The same build run against an empty
+cache and against a populated one produces different `height` attributes,
+and the cold one is wrong.
+
+`src/assets/images/sample3.jpg` is 354x417. Emitted markup:
+
+```html
+<!-- first build, empty cache -->
+<img src="/assets/images/sample3.jpg" width="320" height="417">
+<!-- every build after, cache populated -->
+<img src="/assets/images/sample3.jpg" width="320" height="377">
+```
+
+320 / 354 * 417 = 377, so the warm value is correct and the cold value keeps
+the source height while scaling the width. The consequence is that the first
+build after a cache wipe, which is what CI and a fresh clone do, ships images
+with a distorted aspect ratio and the layout shift that comes with it.
+
+The likely cause is that the cold path reads dimensions from the source image
+and the warm path from the generated variant, and only the second one accounts
+for the resize.
+
 ## Verification for a fix
 
 - Starter, clean `rm -rf build && npm run build`: pages must contain `srcset`
   pointing at hashed variants.
 - Same build run twice, once over an empty `build/` and once over a populated
   one: output must be identical. This is the invariant that is broken today.
+- Same build run against an empty cache and a populated one: the `width` and
+  `height` attributes must match, and must reflect the source aspect ratio.
 - wernerglinka.com must keep working: 104 pages rewritten, cache reused from
   `lib/assets/images/responsive` rather than regenerated.
